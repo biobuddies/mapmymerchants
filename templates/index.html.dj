@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html>
+    {% load leaflet_tags %}
+    <head>
+        <title>Map My Merchants</title>
+        <meta charset='utf-8' />
+        <meta content='strict-origin-when-cross-origin' name='referrer' />
+        {% leaflet_js %}
+        {% leaflet_css %}
+        <style>
+            body,
+            html {
+                height: 100%;
+                margin: 0;
+                padding: 0;
+            }
+        </style>
+        <script>
+            window.addEventListener('map:init', function (event) {
+                var map = event.detail.map
+                {% if places %}
+                map.setView({{ places.0.0 }}, 15)
+                {% else %}
+                map.setView([39.5, -98.35], 4)
+                {% endif %}
+                {% for latitude_longitude, name, address in places %}
+                L.marker({{ latitude_longitude }}).addTo(map).bindTooltip(
+                    '{{ name }}',
+                    {permanent: true}
+                )
+                {% endfor %}
+            })
+        </script>
+    </head>
+    <body>{% leaflet_map "merchants" %}</body>
+</html>
