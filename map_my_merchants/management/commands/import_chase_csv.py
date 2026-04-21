@@ -6,7 +6,7 @@ from map_my_merchants.management.chase import import_latest_places
 
 
 class Command(BaseCommand):
-    help = 'Import the latest Chase transactions for selected chains into businesses and places.'
+    help = 'Import the latest Chase transactions for selected chains into brands, charges, and places.'
 
     def add_arguments(self, parser: CommandParser) -> None:
         parser.add_argument('csv_path', type=Path)
