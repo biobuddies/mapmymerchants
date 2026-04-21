@@ -1,0 +1,4 @@
+default_context:
+    languages: Node,Python
+    python_dependencies:
+        - django
