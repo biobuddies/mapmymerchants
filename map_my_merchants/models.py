@@ -3,13 +3,18 @@ from logging import getLogger
 
 from django.db.models import (
     BigIntegerField,
+    DateField,
     DateTimeField,
+    DecimalField,
     FloatField,
+    ForeignKey,
     IntegerField,
     JSONField,
     Manager,
     ManyToManyField,
     Model,
+    PROTECT,
+    SET_NULL,
     UniqueConstraint,
     TextField,
     Value,
@@ -21,14 +26,14 @@ from geopy.geocoders import Nominatim
 logger = getLogger(__name__)
 
 
-class Business(Model):
+class Brand(Model):
     created = DateTimeField(auto_now_add=True)
     updated = DateTimeField(auto_now=True)
 
     name = TextField(unique=True)
 
     class Meta:
-        verbose_name_plural = 'Businesses'
+        verbose_name_plural = 'Brands'
 
     def __str__(self):
         return self.name
@@ -59,7 +64,7 @@ class PlaceManager(Manager):
 class Place(Model):
     address = TextField(blank=True, unique=True)
     created = DateTimeField(auto_now_add=True)
-    businesses = ManyToManyField(Business, related_name='places')
+    brands = ManyToManyField(Brand, related_name='places')
     mega_latitude = IntegerField(blank=True, null=True)
     mega_longitude = IntegerField(blank=True, null=True)
     name = TextField(unique=True)
@@ -94,3 +99,27 @@ class Place(Model):
         self.mega_latitude = location.latitude * 1_000_000
         self.mega_longitude = location.longitude * 1_000_000
         self.save()
+
+
+class Charge(Model):
+    amount_usd = DecimalField(decimal_places=2, max_digits=12)
+    brand = ForeignKey(Brand, on_delete=PROTECT, related_name='charges')
+    created = DateTimeField(auto_now_add=True)
+    description = TextField()
+    place = ForeignKey(
+        Place,
+        blank=True,
+        null=True,
+        on_delete=SET_NULL,
+        related_name='charges',
+    )
+    post_date = DateField()
+    store_ref = TextField(blank=True)
+    transaction_date = DateField()
+    updated = DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ('-transaction_date', '-post_date', '-id')
+
+    def __str__(self):
+        return f'{self.transaction_date} {self.brand} {self.amount_usd}'
