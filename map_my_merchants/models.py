@@ -6,9 +6,11 @@ from django.db.models import (
     DateTimeField,
     FloatField,
     IntegerField,
+    JSONField,
     Manager,
     ManyToManyField,
     Model,
+    UniqueConstraint,
     TextField,
     Value,
 )
@@ -61,12 +63,18 @@ class Place(Model):
     mega_latitude = IntegerField(blank=True, null=True)
     mega_longitude = IntegerField(blank=True, null=True)
     name = TextField(unique=True)
-    osm_id = BigIntegerField(blank=True, null=True, unique=True)
+    osm_id = BigIntegerField(blank=True, null=True)
     osm_ref = TextField(blank=True)
+    osm_response = JSONField(blank=True, default=dict)
     osm_type = TextField(blank=True)
     updated = DateTimeField(auto_now=True)
 
     objects = PlaceManager()
+
+    class Meta:
+        constraints = [
+            UniqueConstraint(fields=('osm_type', 'osm_id'), name='place_osm_type_osm_id_unique')
+        ]
 
     def __str__(self):
         return self.name

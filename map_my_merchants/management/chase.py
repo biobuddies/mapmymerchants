@@ -2,14 +2,22 @@ from csv import DictReader
 from dataclasses import dataclass
 from datetime import datetime
 from html import unescape
-from json import load
+from json import dumps, load
+from logging import getLogger
 from pathlib import Path
 from re import IGNORECASE, Pattern, compile
+from time import perf_counter
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
 from map_my_merchants.models import Business, Place
+
+logger = getLogger(__name__)
+
+
+def log_fields(**fields: object) -> None:
+    logger.info(' '.join(f'{key}={dumps(value, sort_keys=True)}' for key, value in fields.items()))
 
 
 @dataclass(frozen=True)
@@ -33,34 +41,47 @@ TARGETS = (
     MerchantSpec(
         business_name="Chick-fil-A",
         brand="Chick-fil-A",
-        description_pattern=compile(r'CHICK-FIL-A\s+#?(?P<ref>\d+)', IGNORECASE),
+        description_pattern=compile(r'chick-fil-a\s+#?(?P<ref>\d+)', IGNORECASE),
         name_pattern=r"^Chick-fil-A$",
+    ),
+    MerchantSpec(
+        business_name='Food Lion',
+        brand='Food Lion',
+        description_pattern=compile(r'food lion\s+#?(?P<ref>\d+)', IGNORECASE),
+        name_pattern=r'^Food Lion$',
     ),
     MerchantSpec(
         business_name="Lowe's",
         brand="Lowe's",
-        description_pattern=compile(r'LOWES\s+#?(?P<ref>\d+)', IGNORECASE),
+        description_pattern=compile(r'lowes\s+#?(?P<ref>\d+)', IGNORECASE),
         name_pattern=r"^Lowe'?s$",
     ),
     MerchantSpec(
         business_name="McDonald's",
         brand="McDonald's",
-        description_pattern=compile(r"MCDONALD'?S(?:\s+#?|\s+)(?P<ref>\d+)", IGNORECASE),
+        description_pattern=compile(r"mcdonald'?s(?:\s+#?|\s+)(?P<ref>\d+)", IGNORECASE),
         name_pattern=r"^McDonald'?s$",
     ),
 )
 
 
-def import_latest_places(csv_path: Path, overpass_url: str) -> list[dict[str, str]]:
+def import_latest_places(csv_path: Path, overpass_url: str, overpass_timeout_seconds: int) -> list[dict[str, str]]:
     rows = tuple(read_matching_rows(csv_path))
+    log_fields(event='read_matching_rows', csv_path=str(csv_path), row_count=len(rows))
     results = []
     for spec in TARGETS:
         match = latest_row(rows, spec)
         if match is None:
+            log_fields(event='missing_transaction', business_name=spec.business_name)
             results.append({'business': spec.business_name, 'status': 'missing-transaction'})
             continue
-        element = find_osm_element(spec, match.store_ref, overpass_url)
+        log_fields(event='import_latest_place', business_name=spec.business_name, store_ref=match.store_ref)
+        if place := matching_place(spec, match.store_ref):
+            results.append(reuse_place(spec, match, place))
+            continue
+        element = find_osm_element(spec, match.store_ref, overpass_url, overpass_timeout_seconds)
         if element is None:
+            log_fields(event='missing_osm', business_name=spec.business_name, store_ref=match.store_ref)
             results.append(
                 {
                     'business': spec.business_name,
@@ -113,32 +134,104 @@ def parse_date(value: str) -> datetime:
     return datetime.strptime(value, '%m/%d/%Y')
 
 
-def find_osm_element(spec: MerchantSpec, store_ref: str, overpass_url: str) -> dict | None:
+def find_osm_element(
+    spec: MerchantSpec,
+    store_ref: str,
+    overpass_url: str,
+    overpass_timeout_seconds: int,
+) -> dict | None:
+    query = overpass_query(spec, store_ref, overpass_timeout_seconds)
+    log_fields(
+        business_name=spec.business_name,
+        event='overpass_request_start',
+        overpass_url=overpass_url,
+        query=query,
+        store_ref=store_ref,
+        timeout_seconds=overpass_timeout_seconds,
+    )
     request = Request(
-        f'{overpass_url}?{urlencode({"data": overpass_query(spec, store_ref)})}',
+        f'{overpass_url}?{urlencode({"data": query})}',
         headers={'User-Agent': 'mapmymerchants/0'},
     )
+    started_at = perf_counter()
     try:
-        with urlopen(request, timeout=30) as response:
+        with urlopen(request, timeout=overpass_timeout_seconds) as response:
             payload = load(response)
     except (HTTPError, URLError, TimeoutError) as error:
+        elapsed_seconds = perf_counter() - started_at
+        log_fields(
+            business_name=spec.business_name,
+            elapsed_seconds=round(elapsed_seconds, 1),
+            error=repr(error),
+            event='overpass_request_failed',
+            overpass_url=overpass_url,
+            query=query,
+            store_ref=store_ref,
+            timeout_seconds=overpass_timeout_seconds,
+        )
         raise RuntimeError(f'Unable to query Overpass for {spec.business_name} #{store_ref}') from error
-    elements = payload.get('elements', [])
-    return best_element(spec, store_ref, elements)
+    elapsed_seconds = perf_counter() - started_at
+    log_fields(
+        business_name=spec.business_name,
+        elapsed_seconds=round(elapsed_seconds, 1),
+        element_count=len(payload.get('elements', [])),
+        event='overpass_request_finished',
+        overpass_url=overpass_url,
+        query=query,
+        store_ref=store_ref,
+        timeout_seconds=overpass_timeout_seconds,
+    )
+    return best_element(spec, store_ref, payload.get('elements', []))
 
 
-def overpass_query(spec: MerchantSpec, store_ref: str) -> str:
+def overpass_query(spec: MerchantSpec, store_ref: str, overpass_timeout_seconds: int = 180) -> str:
     refs = sorted({store_ref, store_ref.zfill(5)})
     brand_queries = ''.join(f'nwr["brand"="{spec.brand}"]["ref"="{ref}"];' for ref in refs)
     name_queries = ''.join(f'nwr["name"~"{spec.name_pattern}",i]["ref"="{ref}"];' for ref in refs)
     return (
-        '[out:json][timeout:25];'
+        f'[out:json][timeout:{overpass_timeout_seconds}];'
         '('
         f'{brand_queries}'
         f'{name_queries}'
         ');'
         'out center tags;'
     )
+
+
+def matching_place(spec: MerchantSpec, store_ref: str) -> Place | None:
+    matches = [
+        place
+        for place in Place.objects.filter(osm_ref=store_ref).order_by('id')
+        if place_matches_spec(spec, place)
+    ]
+    if not matches:
+        return None
+    place = matches[0]
+    log_fields(
+        business_name=spec.business_name,
+        event='place_cache_hit',
+        osm_id=place.osm_id,
+        osm_type=place.osm_type,
+        place_name=place.name,
+        store_ref=store_ref,
+    )
+    return place
+
+
+def place_matches_spec(spec: MerchantSpec, place: Place) -> bool:
+    tags = place.osm_response.get('tags', {})
+    place_name = place.name.partition(' #')[0]
+    return any(
+        (
+            tags.get('brand') == spec.brand,
+            bool(tags.get('name')) and bool(search_pattern(spec.name_pattern, tags['name'])),
+            bool(place_name) and bool(search_pattern(spec.name_pattern, place_name)),
+        )
+    )
+
+
+def search_pattern(pattern: str, value: str) -> bool:
+    return bool(compile(pattern, IGNORECASE).search(value))
 
 
 def best_element(spec: MerchantSpec, store_ref: str, elements: list[dict]) -> dict | None:
@@ -177,13 +270,15 @@ def upsert_place(spec: MerchantSpec, row: ChaseRow, element: dict) -> dict[str, 
     osm_type = element['type']
     name = f'{spec.business_name} #{row.store_ref}'
     place, _ = Place.objects.update_or_create(
-        name=name,
+        osm_id=osm_id,
+        osm_type=osm_type,
         defaults={
             'address': osm_address(element),
             'mega_latitude': mega_coordinate(element_coordinate(element, 'lat')),
             'mega_longitude': mega_coordinate(element_coordinate(element, 'lon')),
-            'osm_id': osm_id,
+            'name': name,
             'osm_ref': row.store_ref,
+            'osm_response': element,
             'osm_type': osm_type,
         },
     )
@@ -193,6 +288,17 @@ def upsert_place(spec: MerchantSpec, row: ChaseRow, element: dict) -> dict[str, 
         'osm_id': str(place.osm_id),
         'ref': row.store_ref,
         'status': 'imported',
+    }
+
+
+def reuse_place(spec: MerchantSpec, row: ChaseRow, place: Place) -> dict[str, str]:
+    business, _ = Business.objects.get_or_create(name=spec.business_name)
+    place.businesses.add(business)
+    return {
+        'business': business.name,
+        'osm_id': str(place.osm_id),
+        'ref': row.store_ref,
+        'status': 'reused-place',
     }
 
 
