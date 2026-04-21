@@ -27,7 +27,9 @@ logger = getLogger(__name__)
 
 
 class Brand(Model):
+    chase_ref_pattern = TextField(default=r'\s+#?(?P<ref>\d+)')
     created = DateTimeField(auto_now_add=True)
+    match_pattern = TextField(default='')
     updated = DateTimeField(auto_now=True)
 
     name = TextField(unique=True)
@@ -119,6 +121,12 @@ class Charge(Model):
     updated = DateTimeField(auto_now=True)
 
     class Meta:
+        constraints = [
+            UniqueConstraint(
+                fields=('brand', 'amount_usd', 'description', 'post_date', 'store_ref', 'transaction_date'),
+                name='charge_identity_unique',
+            )
+        ]
         ordering = ('-transaction_date', '-post_date', '-id')
 
     def __str__(self):

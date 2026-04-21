@@ -1,6 +1,6 @@
 # Map My Merchants
 
-`mapmymerchants` tracks businesses and the places where they show up on a map.
+`mapmymerchants` tracks brands, charges, and the places where they show up on a map.
 
 The goal is to take an export of credit card or debit card transactions and put those merchants on
 a Leaflet map.
