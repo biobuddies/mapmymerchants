@@ -1,20 +1,35 @@
 from datetime import datetime
+from pathlib import Path
 
 from django.test import TestCase
 
 from map_my_merchants.management.chase import (
     ChaseRow,
     best_element,
+    chase_brand_store_ref,
+    create_placeholder_place_and_charge,
     import_brands,
+    import_statement,
     matching_spec,
     matching_place,
     overpass_query,
+    place_name,
     search_pattern,
+    unresolved_places,
 )
-from map_my_merchants.models import Brand, Charge, Place
+from map_my_merchants.models import Brand, Charge, Place, Statement
 
 
 class ChaseImporterTests(TestCase):
+    def test_import_statement_reuses_existing_csv_hash(self):
+        csv_path = Path('/tmp/tmp-test-import-statement.csv')
+        csv_path.write_text('Transaction Date,Post Date,Description,Category,Type,Amount,Memo\n')
+        self.addCleanup(csv_path.unlink)
+        first = import_statement(csv_path)
+        second = import_statement(csv_path)
+        self.assertEqual(first.id, second.id)
+        self.assertEqual(Statement.objects.filter(source_name='tmp-test-import-statement.csv').count(), 1)
+
     def test_matching_spec_extracts_food_lion_store_ref(self):
         brand, store_ref = matching_spec('FOOD LION #1484')
         self.assertEqual((brand.name, store_ref), ('Food Lion', '1484'))
@@ -26,6 +41,15 @@ class ChaseImporterTests(TestCase):
     def test_matching_spec_extracts_chick_fil_a_store_ref(self):
         brand, store_ref = matching_spec('CHICK-FIL-A #03376')
         self.assertEqual((brand.name, store_ref), ('Chick-fil-A', '3376'))
+
+    def test_chase_brand_store_ref_creates_brand_for_unconfigured_description(self):
+        brand, store_ref = chase_brand_store_ref('STARBUCKS 1234')
+        self.assertEqual((brand.name, store_ref), ('STARBUCKS', '1234'))
+        self.assertEqual(Brand.objects.get(name='STARBUCKS').match_pattern, '^STARBUCKS$')
+
+    def test_chase_brand_store_ref_returns_blank_ref_when_missing(self):
+        brand, store_ref = chase_brand_store_ref('Neighborhood Market')
+        self.assertEqual((brand.name, store_ref), ('Neighborhood Market', ''))
 
     def test_overpass_query_regex_matches_zero_padded_and_trimmed_refs(self):
         query = overpass_query(Brand.objects.get(name="Lowe's"), '625')
@@ -65,6 +89,21 @@ class ChaseImporterTests(TestCase):
     def test_import_brands_reads_database_rules(self):
         self.assertEqual([brand.name for brand in import_brands()], ['Chick-fil-A', 'Food Lion', "Lowe's", "McDonald's"])
 
+    def test_unresolved_places_returns_places_missing_coordinates(self):
+        Place.objects.create(
+            address='1 Main St',
+            mega_latitude=35_000_000,
+            mega_longitude=-78_000_000,
+            name="Lowe's #625",
+            osm_ref='625',
+        )
+        unresolved = Place.objects.create(
+            address='pending:Food Lion#1484',
+            name='Food Lion #1484',
+            osm_ref='1484',
+        )
+        self.assertEqual(unresolved_places(), (unresolved,))
+
 
 class ChaseImporterPlaceCacheTests(TestCase):
     def test_matching_place_uses_store_ref_and_fuzzy_name(self):
@@ -86,43 +125,83 @@ class ChaseImporterPlaceCacheTests(TestCase):
             name="Lowe's #625",
         )
         brand = Brand.objects.get(name="Lowe's")
+        statement = Statement.objects.create(
+            content_sha256='statement-1',
+            source_name='statement-1.csv',
+            source_path='/tmp/statement-1.csv',
+        )
         row = ChaseRow(
             amount_usd=12.34,
             brand=brand,
             description='LOWES #00625*',
+            line_number=1,
             post_date=datetime(2026, 4, 20),
+            raw_input={'Description': 'LOWES #00625*'},
+            statement=statement,
             store_ref='625',
             transaction_date=datetime(2026, 4, 19),
         )
         charge, _ = Charge.objects.update_or_create(
-            amount_usd='12.34',
-            brand=brand,
-            description='LOWES #00625*',
-            post_date=datetime(2026, 4, 20).date(),
-            store_ref='625',
-            transaction_date=datetime(2026, 4, 19).date(),
-            defaults={'place': place},
+            line_number=1,
+            statement=statement,
+            defaults={
+                'amount_usd': '12.34',
+                'description': 'LOWES #00625*',
+                'place': place,
+                'post_date': datetime(2026, 4, 20).date(),
+                'raw_input': row.raw_input,
+                'transaction_date': datetime(2026, 4, 19).date(),
+            },
         )
         self.assertEqual(
             Charge.objects.values_list(
                 'amount_usd',
-                'brand__name',
                 'description',
+                'line_number',
                 'place_id',
                 'post_date',
-                'store_ref',
+                'raw_input',
+                'statement_id',
                 'transaction_date',
             ).get(),
             (
                 Charge.objects.get().amount_usd,
-                "Lowe's",
                 'LOWES #00625*',
+                1,
                 place.id,
                 charge.post_date,
-                '625',
+                {'Description': 'LOWES #00625*'},
+                statement.id,
                 charge.transaction_date,
             ),
         )
+
+    def test_create_placeholder_place_and_charge_links_charge(self):
+        brand = Brand.objects.get(name="Lowe's")
+        statement = Statement.objects.create(
+            content_sha256='statement-2',
+            source_name='statement-2.csv',
+            source_path='/tmp/statement-2.csv',
+        )
+        row = ChaseRow(
+            amount_usd=12.34,
+            brand=brand,
+            description='LOWES #00625*',
+            line_number=1,
+            post_date=datetime(2026, 4, 20),
+            raw_input={'Description': 'LOWES #00625*'},
+            statement=statement,
+            store_ref='625',
+            transaction_date=datetime(2026, 4, 19),
+        )
+        self.assertEqual(
+            create_placeholder_place_and_charge(row),
+            {'place': "Lowe's #625", 'ref': '625', 'status': 'created-place'},
+        )
+        place = Place.objects.get(name=place_name(brand, row.description, '625'))
+        self.assertEqual(place.address, "pending:Lowe's#625")
+        self.assertEqual(Charge.objects.get().place, place)
+        self.assertEqual(Charge.objects.get().raw_input, {'Description': 'LOWES #00625*'})
 
     def test_create_charge_is_idempotent_for_same_row(self):
         first_place = Place.objects.create(
@@ -131,39 +210,52 @@ class ChaseImporterPlaceCacheTests(TestCase):
             mega_longitude=-78_000_000,
             name="Lowe's #625",
         )
-        second_place = Place.objects.create(
-            address='626 Main St',
-            mega_latitude=35_100_000,
-            mega_longitude=-78_100_000,
-            name="Lowe's #625 alt",
-        )
         brand = Brand.objects.get(name="Lowe's")
+        statement = Statement.objects.create(
+            content_sha256='statement-3',
+            source_name='statement-3.csv',
+            source_path='/tmp/statement-3.csv',
+        )
         row = ChaseRow(
             amount_usd=12.34,
             brand=brand,
             description='LOWES #00625*',
+            line_number=1,
             post_date=datetime(2026, 4, 20),
+            raw_input={'Description': 'LOWES #00625*'},
+            statement=statement,
             store_ref='625',
             transaction_date=datetime(2026, 4, 19),
         )
         first_charge, _ = Charge.objects.update_or_create(
-            amount_usd='12.34',
-            brand=brand,
-            description='LOWES #00625*',
-            post_date=datetime(2026, 4, 20).date(),
-            store_ref='625',
-            transaction_date=datetime(2026, 4, 19).date(),
-            defaults={'place': first_place},
+            line_number=1,
+            statement=statement,
+            defaults={
+                'amount_usd': '12.34',
+                'description': 'LOWES #00625*',
+                'place': first_place,
+                'post_date': datetime(2026, 4, 20).date(),
+                'raw_input': row.raw_input,
+                'transaction_date': datetime(2026, 4, 19).date(),
+            },
         )
         second_charge, _ = Charge.objects.update_or_create(
-            amount_usd='12.34',
-            brand=brand,
-            description='LOWES #00625*',
-            post_date=datetime(2026, 4, 20).date(),
-            store_ref='625',
-            transaction_date=datetime(2026, 4, 19).date(),
-            defaults={'place': second_place},
+            line_number=1,
+            statement=statement,
+            defaults={
+                'amount_usd': '12.34',
+                'description': 'LOWES #00625*',
+                'place': first_place,
+                'post_date': datetime(2026, 4, 20).date(),
+                'raw_input': {'Description': 'LOWES #00625*', 'Memo': 'updated'},
+                'transaction_date': datetime(2026, 4, 19).date(),
+            },
         )
         self.assertEqual(first_charge.id, second_charge.id)
         self.assertEqual(Charge.objects.count(), 1)
-        self.assertEqual(Charge.objects.get().place, second_place)
+        self.assertEqual(Charge.objects.get().place, first_place)
+        self.assertEqual(Charge.objects.get().raw_input['Memo'], 'updated')
+
+    def test_place_name_uses_description_when_store_ref_missing(self):
+        brand = Brand.objects.get(name="Lowe's")
+        self.assertEqual(place_name(brand, 'LOWES RALEIGH', ''), 'LOWES RALEIGH')

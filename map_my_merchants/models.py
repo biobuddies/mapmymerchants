@@ -14,7 +14,6 @@ from django.db.models import (
     ManyToManyField,
     Model,
     PROTECT,
-    SET_NULL,
     UniqueConstraint,
     TextField,
     Value,
@@ -30,6 +29,7 @@ class Brand(Model):
     chase_ref_pattern = TextField(default=r'\s+#?(?P<ref>\d+)')
     created = DateTimeField(auto_now_add=True)
     match_pattern = TextField(default='')
+    wikidata_id = TextField(blank=True)
     updated = DateTimeField(auto_now=True)
 
     name = TextField(unique=True)
@@ -41,9 +41,20 @@ class Brand(Model):
         return self.name
 
 
+class Statement(Model):
+    content_sha256 = TextField(unique=True)
+    created = DateTimeField(auto_now_add=True)
+    source_name = TextField()
+    source_path = TextField(blank=True)
+    updated = DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return self.source_name
+
+
 class PlaceManager(Manager):
     def with_positions(self):
-        return self.annotate(
+        return self.filter(mega_latitude__isnull=False, mega_longitude__isnull=False).annotate(
             position=Concat(
                 Value('['),
                 Cast('mega_latitude', FloatField()) / 1_000_000,
@@ -105,29 +116,28 @@ class Place(Model):
 
 class Charge(Model):
     amount_usd = DecimalField(decimal_places=2, max_digits=12)
-    brand = ForeignKey(Brand, on_delete=PROTECT, related_name='charges')
     created = DateTimeField(auto_now_add=True)
     description = TextField()
+    line_number = IntegerField()
     place = ForeignKey(
         Place,
-        blank=True,
-        null=True,
-        on_delete=SET_NULL,
+        on_delete=PROTECT,
         related_name='charges',
     )
     post_date = DateField()
-    store_ref = TextField(blank=True)
+    raw_input = JSONField(blank=True, default=dict)
+    statement = ForeignKey(Statement, on_delete=PROTECT, related_name='charges')
     transaction_date = DateField()
     updated = DateTimeField(auto_now=True)
 
     class Meta:
         constraints = [
             UniqueConstraint(
-                fields=('brand', 'amount_usd', 'description', 'post_date', 'store_ref', 'transaction_date'),
+                fields=('statement', 'line_number'),
                 name='charge_identity_unique',
             )
         ]
         ordering = ('-transaction_date', '-post_date', '-id')
 
     def __str__(self):
-        return f'{self.transaction_date} {self.brand} {self.amount_usd}'
+        return f'{self.statement}#{self.line_number} {self.amount_usd}'

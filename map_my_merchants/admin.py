@@ -3,27 +3,34 @@ from django.db.models import Case, FloatField, TextField, Value, When
 from django.db.models.functions import Abs, Cast, Concat, Round
 from django.utils.html import format_html
 
-from .models import Brand, Charge, Place
+from .models import Brand, Charge, Place, Statement
 
 
 @admin.register(Brand)
 class BrandAdmin(admin.ModelAdmin):
-    list_display = ('name', 'match_pattern', 'chase_ref_pattern', 'created', 'updated')
+    list_display = ('name', 'wikidata_id', 'match_pattern', 'chase_ref_pattern', 'created', 'updated')
     readonly_fields = ('created', 'updated')
 
 
 @admin.register(Charge)
 class ChargeAdmin(admin.ModelAdmin):
     list_display = (
+        'statement',
+        'line_number',
         'transaction_date',
-        'brand',
-        'amount_usd',
-        'store_ref',
         'place',
+        'amount_usd',
+        'description',
         'created',
         'updated',
     )
-    readonly_fields = ('created', 'updated')
+    readonly_fields = ('created', 'raw_input', 'updated')
+
+
+@admin.register(Statement)
+class StatementAdmin(admin.ModelAdmin):
+    list_display = ('source_name', 'content_sha256', 'source_path', 'created', 'updated')
+    readonly_fields = ('content_sha256', 'created', 'updated')
 
 
 @admin.register(Place)
