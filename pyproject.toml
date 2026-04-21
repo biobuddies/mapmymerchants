@@ -29,6 +29,7 @@ pre-commit = [
 test = [
     'pytest',
     'pytest-cov',
+    'pytest-django',
 ]
 
 
@@ -37,3 +38,6 @@ extends = '.biobuddies/basedpyright.toml'
 
 [tool.ruff]
 extend = '.biobuddies/ruff.toml'
+
+[tool.pytest.ini_options]
+DJANGO_SETTINGS_MODULE = 'config.settings'

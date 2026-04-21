@@ -1,6 +1,7 @@
 from csv import DictReader
 from dataclasses import dataclass
 from datetime import datetime
+from decimal import Decimal
 from html import unescape
 from json import dumps, load
 from logging import getLogger
@@ -11,7 +12,7 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
-from map_my_merchants.models import Business, Place
+from map_my_merchants.models import Brand, Charge, Place
 
 logger = getLogger(__name__)
 
@@ -19,78 +20,61 @@ logger = getLogger(__name__)
 def log_fields(**fields: object) -> None:
     logger.info(' '.join(f'{key}={dumps(value, sort_keys=True)}' for key, value in fields.items()))
 
-
-@dataclass(frozen=True)
-class MerchantSpec:
-    business_name: str
-    brand: str
-    description_pattern: Pattern[str]
-    name_pattern: str
-
-
 @dataclass(frozen=True)
 class ChaseRow:
     amount_usd: float
+    brand: Brand
     description: str
     post_date: datetime
     store_ref: str
     transaction_date: datetime
 
 
-TARGETS = (
-    MerchantSpec(
-        business_name="Chick-fil-A",
-        brand="Chick-fil-A",
-        description_pattern=compile(r'chick-fil-a\s+#?(?P<ref>\d+)', IGNORECASE),
-        name_pattern=r"^Chick-fil-A$",
-    ),
-    MerchantSpec(
-        business_name='Food Lion',
-        brand='Food Lion',
-        description_pattern=compile(r'food lion\s+#?(?P<ref>\d+)', IGNORECASE),
-        name_pattern=r'^Food Lion$',
-    ),
-    MerchantSpec(
-        business_name="Lowe's",
-        brand="Lowe's",
-        description_pattern=compile(r'lowes\s+#?(?P<ref>\d+)', IGNORECASE),
-        name_pattern=r"^Lowe'?s$",
-    ),
-    MerchantSpec(
-        business_name="McDonald's",
-        brand="McDonald's",
-        description_pattern=compile(r"mcdonald'?s(?:\s+#?|\s+)(?P<ref>\d+)", IGNORECASE),
-        name_pattern=r"^McDonald'?s$",
-    ),
-)
+def import_brands() -> tuple[Brand, ...]:
+    return tuple(Brand.objects.exclude(match_pattern='').order_by('name'))
+
+
+def description_pattern(brand: Brand) -> Pattern[str]:
+    brand_pattern = brand.match_pattern.removeprefix('^').removesuffix('$')
+    return compile(f'{brand_pattern}{brand.chase_ref_pattern}', IGNORECASE)
 
 
 def import_latest_places(csv_path: Path, overpass_url: str, overpass_timeout_seconds: int) -> list[dict[str, str]]:
+    brands = import_brands()
     rows = tuple(read_matching_rows(csv_path))
-    log_fields(event='read_matching_rows', csv_path=str(csv_path), row_count=len(rows))
+    log_fields(event='read-matching-rows', csv_path=str(csv_path), row_count=len(rows))
     results = []
-    for spec in TARGETS:
-        match = latest_row(rows, spec)
+    for brand in brands:
+        match = latest_row(rows, brand)
         if match is None:
-            log_fields(event='missing_transaction', business_name=spec.business_name)
-            results.append({'business': spec.business_name, 'status': 'missing-transaction'})
+            log_fields(event='missing-transaction', brand=brand.name)
+            results.append({'brand': brand.name, 'status': 'missing-transaction'})
             continue
-        log_fields(event='import_latest_place', business_name=spec.business_name, store_ref=match.store_ref)
-        if place := matching_place(spec, match.store_ref):
-            results.append(reuse_place(spec, match, place))
+        log_fields(event='import-latest-place', brand=brand.name, store_ref=match.store_ref)
+        if place := matching_place(brand, match.store_ref):
+            results.append(reuse_place_and_create_charge(match, place))
             continue
-        element = find_osm_element(spec, match.store_ref, overpass_url, overpass_timeout_seconds)
+        element = find_osm_element(brand, match.store_ref, overpass_url, overpass_timeout_seconds)
         if element is None:
-            log_fields(event='missing_osm', business_name=spec.business_name, store_ref=match.store_ref)
+            Charge.objects.update_or_create(
+                amount_usd=Decimal(f'{match.amount_usd:.2f}'),
+                brand=brand,
+                description=match.description,
+                post_date=match.post_date.date(),
+                store_ref=match.store_ref,
+                transaction_date=match.transaction_date.date(),
+                defaults={'place': None},
+            )
+            log_fields(event='missing-osm', brand=brand.name, store_ref=match.store_ref)
             results.append(
                 {
-                    'business': spec.business_name,
+                    'brand': brand.name,
                     'ref': match.store_ref,
                     'status': 'missing-osm',
                 }
             )
             continue
-        results.append(upsert_place(spec, match, element))
+        results.append(upsert_place_and_create_charge(match, element))
     return results
 
 
@@ -103,10 +87,11 @@ def read_matching_rows(csv_path: Path) -> list[ChaseRow]:
         ]
 
 
-def chase_row(row: dict[str, str], match: tuple[MerchantSpec, str]) -> ChaseRow:
-    _, store_ref = match
+def chase_row(row: dict[str, str], match: tuple[Brand, str]) -> ChaseRow:
+    brand, store_ref = match
     return ChaseRow(
         amount_usd=abs(float(row['Amount'])),
+        brand=brand,
         description=unescape(row['Description']).strip(),
         post_date=parse_date(row['Post Date']),
         store_ref=store_ref,
@@ -114,8 +99,8 @@ def chase_row(row: dict[str, str], match: tuple[MerchantSpec, str]) -> ChaseRow:
     )
 
 
-def latest_row(rows: list[ChaseRow], spec: MerchantSpec) -> ChaseRow | None:
-    matches = [row for row in rows if matching_spec(row.description) == (spec, row.store_ref)]
+def latest_row(rows: list[ChaseRow], brand: Brand) -> ChaseRow | None:
+    matches = [row for row in rows if row.brand == brand]
     return max(matches, key=row_sort_key) if matches else None
 
 
@@ -123,10 +108,10 @@ def row_sort_key(row: ChaseRow) -> tuple[datetime, datetime, float]:
     return row.transaction_date, row.post_date, row.amount_usd
 
 
-def matching_spec(description: str) -> tuple[MerchantSpec, str] | None:
-    for spec in TARGETS:
-        if match := spec.description_pattern.search(description):
-            return spec, match.group('ref').lstrip('0') or '0'
+def matching_spec(description: str) -> tuple[Brand, str] | None:
+    for brand in import_brands():
+        if match := description_pattern(brand).search(description):
+            return brand, match.group('ref').lstrip('0') or '0'
     return None
 
 
@@ -135,15 +120,15 @@ def parse_date(value: str) -> datetime:
 
 
 def find_osm_element(
-    spec: MerchantSpec,
+    brand: Brand,
     store_ref: str,
     overpass_url: str,
     overpass_timeout_seconds: int,
 ) -> dict | None:
-    query = overpass_query(spec, store_ref, overpass_timeout_seconds)
+    query = overpass_query(brand, store_ref, overpass_timeout_seconds)
     log_fields(
-        business_name=spec.business_name,
-        event='overpass_request_start',
+        brand=brand.name,
+        event='overpass-request-start',
         overpass_url=overpass_url,
         query=query,
         store_ref=store_ref,
@@ -160,34 +145,34 @@ def find_osm_element(
     except (HTTPError, URLError, TimeoutError) as error:
         elapsed_seconds = perf_counter() - started_at
         log_fields(
-            business_name=spec.business_name,
+            brand=brand.name,
             elapsed_seconds=round(elapsed_seconds, 1),
             error=repr(error),
-            event='overpass_request_failed',
+            event='overpass-request-failed',
             overpass_url=overpass_url,
             query=query,
             store_ref=store_ref,
             timeout_seconds=overpass_timeout_seconds,
         )
-        raise RuntimeError(f'Unable to query Overpass for {spec.business_name} #{store_ref}') from error
+        raise RuntimeError(f'Unable to query Overpass for {brand.name} #{store_ref}') from error
     elapsed_seconds = perf_counter() - started_at
     log_fields(
-        business_name=spec.business_name,
+        brand=brand.name,
         elapsed_seconds=round(elapsed_seconds, 1),
         element_count=len(payload.get('elements', [])),
-        event='overpass_request_finished',
+        event='overpass-request-finished',
         overpass_url=overpass_url,
         query=query,
         store_ref=store_ref,
         timeout_seconds=overpass_timeout_seconds,
     )
-    return best_element(spec, store_ref, payload.get('elements', []))
+    return best_element(brand, store_ref, payload.get('elements', []))
 
 
-def overpass_query(spec: MerchantSpec, store_ref: str, overpass_timeout_seconds: int = 180) -> str:
-    refs = sorted({store_ref, store_ref.zfill(5)})
-    brand_queries = ''.join(f'nwr["brand"="{spec.brand}"]["ref"="{ref}"];' for ref in refs)
-    name_queries = ''.join(f'nwr["name"~"{spec.name_pattern}",i]["ref"="{ref}"];' for ref in refs)
+def overpass_query(brand: Brand, store_ref: str, overpass_timeout_seconds: int = 180) -> str:
+    ref_pattern = f'0*{store_ref}'
+    brand_queries = f'nwr["brand"~"{brand.match_pattern}",i]["ref"~"{ref_pattern}"];'
+    name_queries = f'nwr["name"~"{brand.match_pattern}",i]["ref"~"{ref_pattern}"];'
     return (
         f'[out:json][timeout:{overpass_timeout_seconds}];'
         '('
@@ -198,18 +183,18 @@ def overpass_query(spec: MerchantSpec, store_ref: str, overpass_timeout_seconds:
     )
 
 
-def matching_place(spec: MerchantSpec, store_ref: str) -> Place | None:
+def matching_place(brand: Brand, store_ref: str) -> Place | None:
     matches = [
         place
         for place in Place.objects.filter(osm_ref=store_ref).order_by('id')
-        if place_matches_spec(spec, place)
+        if place_matches_brand(brand, place)
     ]
     if not matches:
         return None
     place = matches[0]
     log_fields(
-        business_name=spec.business_name,
-        event='place_cache_hit',
+        brand=brand.name,
+        event='place-cache-hit',
         osm_id=place.osm_id,
         osm_type=place.osm_type,
         place_name=place.name,
@@ -218,14 +203,14 @@ def matching_place(spec: MerchantSpec, store_ref: str) -> Place | None:
     return place
 
 
-def place_matches_spec(spec: MerchantSpec, place: Place) -> bool:
+def place_matches_brand(brand: Brand, place: Place) -> bool:
     tags = place.osm_response.get('tags', {})
     place_name = place.name.partition(' #')[0]
     return any(
         (
-            tags.get('brand') == spec.brand,
-            bool(tags.get('name')) and bool(search_pattern(spec.name_pattern, tags['name'])),
-            bool(place_name) and bool(search_pattern(spec.name_pattern, place_name)),
+            tags.get('brand') == brand.name,
+            bool(tags.get('name')) and bool(search_pattern(brand.match_pattern, tags['name'])),
+            bool(place_name) and bool(search_pattern(brand.match_pattern, place_name)),
         )
     )
 
@@ -234,7 +219,7 @@ def search_pattern(pattern: str, value: str) -> bool:
     return bool(compile(pattern, IGNORECASE).search(value))
 
 
-def best_element(spec: MerchantSpec, store_ref: str, elements: list[dict]) -> dict | None:
+def best_element(brand: Brand, store_ref: str, elements: list[dict]) -> dict | None:
     matches = [
         element
         for element in elements
@@ -243,7 +228,7 @@ def best_element(spec: MerchantSpec, store_ref: str, elements: list[dict]) -> di
     ]
     if not matches:
         return None
-    return max(matches, key=lambda element: element_score(spec, element))
+    return max(matches, key=lambda element: element_score(brand, element))
 
 
 def normalized_ref(value: str) -> str:
@@ -255,20 +240,20 @@ def has_position(element: dict) -> bool:
     return {'lat', 'lon'} <= element.keys() or {'center'} <= element.keys()
 
 
-def element_score(spec: MerchantSpec, element: dict) -> tuple[int, int, int]:
+def element_score(brand: Brand, element: dict) -> tuple[int, int, int]:
     tags = element.get('tags', {})
     return (
-        int(tags.get('brand') == spec.brand),
+        int(tags.get('brand') == brand.name),
         int(bool(tags.get('addr:housenumber')) and bool(tags.get('addr:street'))),
         {'node': 3, 'way': 2, 'relation': 1}.get(element.get('type'), 0),
     )
 
 
-def upsert_place(spec: MerchantSpec, row: ChaseRow, element: dict) -> dict[str, str]:
-    business, _ = Business.objects.get_or_create(name=spec.business_name)
+def upsert_place_and_create_charge(row: ChaseRow, element: dict) -> dict[str, str]:
+    brand = row.brand
     osm_id = element['id']
     osm_type = element['type']
-    name = f'{spec.business_name} #{row.store_ref}'
+    name = f'{brand.name} #{row.store_ref}'
     place, _ = Place.objects.update_or_create(
         osm_id=osm_id,
         osm_type=osm_type,
@@ -282,20 +267,38 @@ def upsert_place(spec: MerchantSpec, row: ChaseRow, element: dict) -> dict[str, 
             'osm_type': osm_type,
         },
     )
-    place.businesses.add(business)
+    place.brands.add(brand)
+    Charge.objects.update_or_create(
+        amount_usd=Decimal(f'{row.amount_usd:.2f}'),
+        brand=brand,
+        description=row.description,
+        post_date=row.post_date.date(),
+        store_ref=row.store_ref,
+        transaction_date=row.transaction_date.date(),
+        defaults={'place': place},
+    )
     return {
-        'business': business.name,
+        'brand': brand.name,
         'osm_id': str(place.osm_id),
         'ref': row.store_ref,
         'status': 'imported',
     }
 
 
-def reuse_place(spec: MerchantSpec, row: ChaseRow, place: Place) -> dict[str, str]:
-    business, _ = Business.objects.get_or_create(name=spec.business_name)
-    place.businesses.add(business)
+def reuse_place_and_create_charge(row: ChaseRow, place: Place) -> dict[str, str]:
+    brand = row.brand
+    place.brands.add(brand)
+    Charge.objects.update_or_create(
+        amount_usd=Decimal(f'{row.amount_usd:.2f}'),
+        brand=brand,
+        description=row.description,
+        post_date=row.post_date.date(),
+        store_ref=row.store_ref,
+        transaction_date=row.transaction_date.date(),
+        defaults={'place': place},
+    )
     return {
-        'business': business.name,
+        'brand': brand.name,
         'osm_id': str(place.osm_id),
         'ref': row.store_ref,
         'status': 'reused-place',
