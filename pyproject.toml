@@ -1,0 +1,39 @@
+[project]
+name = 'mapmymerchants'
+requires-python = '>=3.12'
+version = '0'
+
+dependencies = [
+    'django',
+    'django-leaflet',
+    'geopy',
+]
+
+[project.optional-dependencies]
+pre-commit = [
+    'actionlint-py',
+    'basedpyright',
+    'cookiecutter',
+    'django-upgrade',
+    'djlint',
+    'hadolint-py @ git+https://github.com/AleksaC/hadolint-py.git',
+    'pre-commit-hooks',
+    'pyrefly',
+    'ruff',
+    'shellcheck-py',
+    'shfmt-py',
+    'typos',
+    'validate-pyproject[all]',
+    'yamllint',
+]
+test = [
+    'pytest',
+    'pytest-cov',
+]
+
+
+[tool.basedpyright]
+extends = '.biobuddies/basedpyright.toml'
+
+[tool.ruff]
+extend = '.biobuddies/ruff.toml'
