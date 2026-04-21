@@ -2,7 +2,7 @@ from pathlib import Path
 
 from django.core.management.base import BaseCommand, CommandParser
 
-from map_my_merchants.importers.chase import import_latest_places
+from map_my_merchants.management.chase import import_latest_places
 
 
 class Command(BaseCommand):
@@ -14,8 +14,17 @@ class Command(BaseCommand):
             '--overpass-url',
             default='https://overpass-api.de/api/interpreter',
         )
+        parser.add_argument(
+            '--overpass-timeout-seconds',
+            default=180,
+            type=int,
+        )
 
     def handle(self, *args, **options) -> None:
-        for result in import_latest_places(options['csv_path'], options['overpass_url']):
+        for result in import_latest_places(
+            options['csv_path'],
+            options['overpass_url'],
+            options['overpass_timeout_seconds'],
+        ):
             fields = ' '.join(f'{key}={value}' for key, value in sorted(result.items()))
             self.stdout.write(fields)
