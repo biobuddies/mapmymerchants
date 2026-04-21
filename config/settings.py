@@ -15,6 +15,8 @@ from logging import DEBUG, basicConfig, getLogger
 from os import getenv
 from pathlib import Path
 
+from djp import settings
+
 CONA = 'mapmymerchants'
 ENVI = 'local'
 GIHA = getenv('GIHA', 'unknown')
@@ -170,3 +172,6 @@ getLogger(__name__).info(f'Startup CONA={CONA} ENVI={ENVI} GIHA={GIHA} ROLE={ROL
 
 GDAL_LIBRARY_PATH = '/opt/homebrew/Cellar/gdal/3.12.0_1/lib/libgdal.dylib'
 GEOS_LIBRARY_PATH = '/opt/homebrew/Cellar/geos/3.14.1/lib/libgeos_c.dylib'
+
+# This MUST be the last line:
+settings(globals())
