@@ -1,10 +1,8 @@
-from csv import DictReader
 from dataclasses import dataclass
 from datetime import datetime
 from decimal import Decimal
 from hashlib import sha256
 from html import unescape
-from itertools import islice
 from json import dumps, load
 from logging import getLogger
 from pathlib import Path
@@ -17,6 +15,7 @@ from urllib.request import Request, urlopen
 from django.db.models import Q
 
 from map_my_merchants.models import Brand, Charge, Place, Statement
+from map_my_merchants.xsv import refresh_statement_table, statement_csv_rows
 
 logger = getLogger(__name__)
 CSV_ROW_LIMIT = 30
@@ -48,8 +47,8 @@ def description_pattern(brand: Brand) -> Pattern[str]:
 
 
 def import_chase_rows(csv_path: Path) -> list[dict[str, str]]:
-    statement = import_statement(csv_path)
-    rows = tuple(read_rows(csv_path, statement))
+    statement = register_statement_path(csv_path)
+    rows = tuple(extract_chase_rows(statement))
     log_fields(event='read-rows', csv_path=str(csv_path), row_count=len(rows))
     results = []
     for row in rows:
@@ -65,8 +64,8 @@ def import_chase_rows(csv_path: Path) -> list[dict[str, str]]:
 
 
 def repair_statement_raw_input(csv_path: Path) -> list[dict[str, str]]:
-    statement = import_statement(csv_path)
-    rows = tuple(read_rows(csv_path, statement))
+    statement = register_statement_path(csv_path)
+    rows = tuple(extract_chase_rows(statement))
     log_fields(event='repair-raw-input', csv_path=str(csv_path), row_count=len(rows))
     return [repair_charge_raw_input(row) for row in rows]
 
@@ -76,19 +75,26 @@ def import_latest_places(csv_path: Path, overpass_url: str, overpass_timeout_sec
 
 
 def import_statement(csv_path: Path) -> Statement:
+    return register_statement_path(csv_path)
+
+
+def register_statement_path(csv_path: Path) -> Statement:
+    content_sha256 = sha256(csv_path.read_bytes()).hexdigest()
+    if statement := Statement.objects.filter(source_path=str(csv_path)).first():
+        update_statement_registry(statement, content_sha256, csv_path)
+        refresh_statement_table(statement.id, statement.source_path)
+        return statement
     statement, _ = Statement.objects.get_or_create(
-        content_sha256=sha256(csv_path.read_bytes()).hexdigest(),
+        content_sha256=content_sha256,
         defaults={'source_name': csv_path.name, 'source_path': str(csv_path)},
     )
+    update_statement_registry(statement, content_sha256, csv_path)
+    refresh_statement_table(statement.id, statement.source_path)
     return statement
 
 
-def read_rows(csv_path: Path, statement: Statement) -> list[ChaseRow]:
-    with csv_path.open(newline='') as csv_file:
-        return [
-            chase_row(line_number, row, statement)
-            for line_number, row in enumerate(islice(DictReader(csv_file), CSV_ROW_LIMIT), start=1)
-        ]
+def extract_chase_rows(statement: Statement) -> list[ChaseRow]:
+    return [chase_row(line_number, row, statement) for line_number, row in statement_csv_rows(statement, CSV_ROW_LIMIT)]
 
 
 def chase_row(line_number: int, row: dict[str, str], statement: Statement) -> ChaseRow:
@@ -105,6 +111,24 @@ def chase_row(line_number: int, row: dict[str, str], statement: Statement) -> Ch
         store_ref=store_ref,
         transaction_date=parse_date(row['Transaction Date']),
     )
+
+
+def update_statement_registry(statement: Statement, content_sha256: str, csv_path: Path) -> None:
+    update_fields = tuple(
+        field_name
+        for field_name, value in (
+            ('content_sha256', content_sha256),
+            ('source_name', csv_path.name),
+            ('source_path', str(csv_path)),
+        )
+        if getattr(statement, field_name) != value
+    )
+    if not update_fields:
+        return
+    statement.content_sha256 = content_sha256
+    statement.source_name = csv_path.name
+    statement.source_path = str(csv_path)
+    statement.save(update_fields=update_fields)
 
 
 def chase_brand_store_ref(description: str) -> tuple[Brand, str]:

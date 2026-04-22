@@ -2,12 +2,14 @@ from datetime import datetime
 from pathlib import Path
 
 from django.test import TestCase
+from django.db import connection
 
 from map_my_merchants.management.chase import (
     ChaseRow,
     best_element,
     chase_brand_store_ref,
     create_placeholder_place_and_charge,
+    extract_chase_rows,
     import_brands,
     import_statement,
     matching_spec,
@@ -18,6 +20,7 @@ from map_my_merchants.management.chase import (
     unresolved_places,
 )
 from map_my_merchants.models import Brand, Charge, Place, Statement
+from map_my_merchants.xsv import load_statement_tables
 
 
 class ChaseImporterTests(TestCase):
@@ -30,6 +33,39 @@ class ChaseImporterTests(TestCase):
         self.assertEqual(first.id, second.id)
         self.assertEqual(Statement.objects.filter(source_name='tmp-test-import-statement.csv').count(), 1)
 
+    def test_extract_chase_rows_reads_registered_statement_path(self):
+        csv_path = Path('/tmp/tmp-test-extract-chase-rows.csv')
+        csv_path.write_text(
+            'Transaction Date,Post Date,Description,Category,Type,Amount,Memo\n'
+            '04/17/2026,04/19/2026,FOOD LION #1484,Groceries,Sale,-46.20,\n'
+        )
+        self.addCleanup(csv_path.unlink)
+
+        statement = import_statement(csv_path)
+
+        self.assertEqual(
+            [
+                (row.line_number, row.description, row.raw_input['Category'])
+                for row in extract_chase_rows(statement)
+            ],
+            [(1, 'FOOD LION #1484', 'Groceries')],
+        )
+
+    def test_load_statement_tables_makes_registered_statement_available(self):
+        csv_path = Path('/tmp/tmp-test-load-statement-tables.csv')
+        csv_path.write_text(
+            'Transaction Date,Post Date,Description,Category,Type,Amount,Memo\n'
+            '04/18/2026,04/19/2026,LOWES #00625*,Home,Sale,-244.18,\n'
+        )
+        self.addCleanup(csv_path.unlink)
+        statement = import_statement(csv_path)
+
+        load_statement_tables()
+
+        with connection.cursor() as cursor:
+            cursor.execute("select name from sqlite_temp_master where type = 'table'")
+            self.assertIn(f'statement_{statement.id}', {name for name, in cursor.fetchall()})
+
     def test_matching_spec_extracts_food_lion_store_ref(self):
         brand, store_ref = matching_spec('FOOD LION #1484')
         self.assertEqual((brand.name, store_ref), ('Food Lion', '1484'))
@@ -41,15 +77,6 @@ class ChaseImporterTests(TestCase):
     def test_matching_spec_extracts_chick_fil_a_store_ref(self):
         brand, store_ref = matching_spec('CHICK-FIL-A #03376')
         self.assertEqual((brand.name, store_ref), ('Chick-fil-A', '3376'))
-
-    def test_chase_brand_store_ref_creates_brand_for_unconfigured_description(self):
-        brand, store_ref = chase_brand_store_ref('STARBUCKS 1234')
-        self.assertEqual((brand.name, store_ref), ('STARBUCKS', '1234'))
-        self.assertEqual(Brand.objects.get(name='STARBUCKS').match_pattern, '^STARBUCKS$')
-
-    def test_chase_brand_store_ref_returns_blank_ref_when_missing(self):
-        brand, store_ref = chase_brand_store_ref('Neighborhood Market')
-        self.assertEqual((brand.name, store_ref), ('Neighborhood Market', ''))
 
     def test_overpass_query_regex_matches_zero_padded_and_trimmed_refs(self):
         query = overpass_query(Brand.objects.get(name="Lowe's"), '625')

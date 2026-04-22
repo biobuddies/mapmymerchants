@@ -7,7 +7,15 @@ a Leaflet map.
 
 Unlike `mapmymates`, this project does not import from CardDAV, an address book, or VCF files.
 
-Import the first 30 Chase CSV rows into charges and unresolved places with:
+Register a Chase CSV path without importing charges or places with:
+
+```bash
+.venv/bin/python manage.py import_chase_csv \
+    /Users/jessicacovington/Downloads/Chase2216_Activity20260101_20260420_20260421.CSV \
+    --register-only
+```
+
+Register a Chase CSV path and import the first 30 rows into charges and unresolved places with:
 
 ```bash
 .venv/bin/python manage.py import_chase_csv \
