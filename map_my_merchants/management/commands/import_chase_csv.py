@@ -2,7 +2,7 @@ from pathlib import Path
 
 from django.core.management.base import BaseCommand, CommandError, CommandParser
 
-from map_my_merchants.management.chase import import_chase_rows, repair_statement_raw_input
+from map_my_merchants.management.chase import import_chase_rows, register_statement_path, repair_statement_raw_input
 
 
 class Command(BaseCommand):
@@ -11,6 +11,11 @@ class Command(BaseCommand):
     def add_arguments(self, parser: CommandParser) -> None:
         parser.add_argument('csv_path', type=Path)
         parser.add_argument(
+            '--register-only',
+            action='store_true',
+            help='Update the statement registry entry without importing charges or places.',
+        )
+        parser.add_argument(
             '--repair-raw-input',
             action='store_true',
             help='Rewrite raw_input for the existing first 30 imported rows from the CSV headers.',
@@ -18,7 +23,19 @@ class Command(BaseCommand):
 
     def handle(self, *args, **options) -> None:
         csv_path = options['csv_path']
-        if options['repair_raw_input']:
+        if options['register_only'] and options['repair_raw_input']:
+            raise CommandError('Choose either --register-only or --repair-raw-input')
+        if options['register_only']:
+            statement = register_statement_path(csv_path)
+            results = [
+                {
+                    'content_sha256': statement.content_sha256,
+                    'source_name': statement.source_name,
+                    'source_path': statement.source_path,
+                    'status': 'registered-statement',
+                }
+            ]
+        elif options['repair_raw_input']:
             if not csv_path.exists():
                 raise CommandError(f'Missing CSV: {csv_path}')
             results = repair_statement_raw_input(csv_path)

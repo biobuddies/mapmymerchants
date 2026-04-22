@@ -1,3 +1,4 @@
+from pathlib import Path
 from types import SimpleNamespace
 
 from django.contrib.admin.sites import AdminSite
@@ -48,8 +49,8 @@ class AdminTests(TestCase):
     def test_charge_admin_formats_raw_input_as_table(self):
         place = Place.objects.create(
             address='',
-            brand=Brand.objects.create(name='Starbucks'),
-            name='Starbucks #1234',
+            brand=Brand.objects.get(name="Lowe's"),
+            name="Lowe's #625",
         )
         statement = Statement.objects.create(
             content_sha256='statement-1',
@@ -58,11 +59,11 @@ class AdminTests(TestCase):
         )
         charge = Charge.objects.create(
             amount_usd='4.56',
-            description='Starbucks 1234',
+            description='LOWES #00625*',
             line_number=1,
             place=place,
             post_date='2026-04-20',
-            raw_input={'Category': 'Coffee', 'Memo': ''},
+            raw_input={'Category': 'Home', 'Memo': ''},
             statement=statement,
             transaction_date='2026-04-20',
         )
@@ -72,15 +73,34 @@ class AdminTests(TestCase):
         self.assertIsInstance(rendered, SafeString)
         self.assertIn('<table>', rendered)
         self.assertIn('<code>Category</code>', rendered)
-        self.assertIn('<code>Coffee</code>', rendered)
+        self.assertIn('<code>Home</code>', rendered)
 
     def test_statement_admin_is_read_only(self):
         self.assertFalse(self.statement_admin.has_add_permission(self.request))
         self.assertFalse(self.statement_admin.has_delete_permission(self.request))
         self.assertEqual(
             self.statement_admin.get_readonly_fields(self.request),
-            ('id', 'content_sha256', 'created', 'source_name', 'source_path', 'updated'),
+            ('id', 'content_sha256', 'created', 'source_name', 'source_path', 'source_preview', 'updated'),
         )
+
+    def test_statement_admin_previews_source_data(self):
+        statement_path = Path('/tmp/statement-admin-preview.csv')
+        statement_path.write_text(
+            'Transaction Date,Post Date,Description,Category,Type,Amount,Memo\n'
+            '04/18/2026,04/19/2026,LOWES #00625*,Home,Sale,-244.18,\n'
+        )
+        self.addCleanup(statement_path.unlink)
+        statement = Statement.objects.create(
+            content_sha256='statement-preview',
+            source_name='statement-admin-preview.csv',
+            source_path=str(statement_path),
+        )
+
+        rendered = self.statement_admin.source_preview(statement)
+
+        self.assertIsInstance(rendered, SafeString)
+        self.assertIn('<pre><code>', rendered)
+        self.assertIn('LOWES #00625*', rendered)
 
     def test_place_admin_is_read_only(self):
         self.assertFalse(self.place_admin.has_add_permission(self.request))
@@ -106,11 +126,11 @@ class AdminTests(TestCase):
         )
 
     def test_place_admin_hides_coordinates_when_incomplete(self):
-        place = Place.objects.create(address='', brand=Brand.objects.create(name='Starbucks'), name='Starbucks #1234')
+        place = Place.objects.create(address='', brand=Brand.objects.get(name="Lowe's"), name="Lowe's #625")
         self.assertEqual(self.place_admin.coordinates(place), '')
 
     def test_place_admin_save_model_refreshes_from_osm_lookup(self):
-        place = Place.objects.create(address='', brand=Brand.objects.create(name='Starbucks'), name='Starbucks #1234')
+        place = Place.objects.create(address='', brand=Brand.objects.get(name="Lowe's"), name="Lowe's #625")
         calls = []
 
         def fake_refresh(*args, **kwargs):

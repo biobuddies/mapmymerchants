@@ -7,6 +7,7 @@ from django.utils.html import format_html, format_html_join
 
 from .management.chase import parsed_osm_lookup, refresh_place_from_osm_lookup
 from .models import Brand, Charge, Place, Statement
+from .xsv import preview_statement_data
 
 
 class PlaceAdminForm(forms.ModelForm):
@@ -111,7 +112,13 @@ class ChargeAdmin(admin.ModelAdmin):
 @admin.register(Statement)
 class StatementAdmin(admin.ModelAdmin):
     list_display = ('source_name', 'content_sha256', 'source_path', 'created', 'updated')
-    readonly_fields = ('id', 'content_sha256', 'created', 'source_name', 'source_path', 'updated')
+    readonly_fields = ('id', 'content_sha256', 'created', 'source_name', 'source_path', 'source_preview', 'updated')
+
+    @admin.display(description='Source data')
+    def source_preview(self, obj):
+        if not (preview := preview_statement_data(obj)):
+            return ''
+        return format_html('<pre><code>{}</code></pre>', preview)
 
     def has_add_permission(self, request):
         return False
