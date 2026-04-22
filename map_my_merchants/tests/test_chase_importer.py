@@ -90,15 +90,19 @@ class ChaseImporterTests(TestCase):
         self.assertEqual([brand.name for brand in import_brands()], ['Chick-fil-A', 'Food Lion', "Lowe's", "McDonald's"])
 
     def test_unresolved_places_returns_places_missing_coordinates(self):
+        lowes = Brand.objects.get(name="Lowe's")
+        food_lion = Brand.objects.get(name='Food Lion')
         Place.objects.create(
             address='1 Main St',
+            brand=lowes,
             mega_latitude=35_000_000,
             mega_longitude=-78_000_000,
             name="Lowe's #625",
             osm_ref='625',
         )
         unresolved = Place.objects.create(
-            address='pending:Food Lion#1484',
+            address='',
+            brand=food_lion,
             name='Food Lion #1484',
             osm_ref='1484',
         )
@@ -108,6 +112,7 @@ class ChaseImporterTests(TestCase):
 class ChaseImporterPlaceCacheTests(TestCase):
     def test_matching_place_uses_store_ref_and_fuzzy_name(self):
         place = Place.objects.create(
+            brand=Brand.objects.get(name="Lowe's"),
             mega_latitude=35_000_000,
             mega_longitude=-78_000_000,
             name="Lowe's #625",
@@ -120,6 +125,7 @@ class ChaseImporterPlaceCacheTests(TestCase):
 
     def test_create_charge_links_brand_and_place(self):
         place = Place.objects.create(
+            brand=Brand.objects.get(name="Lowe's"),
             mega_latitude=35_000_000,
             mega_longitude=-78_000_000,
             name="Lowe's #625",
@@ -199,13 +205,19 @@ class ChaseImporterPlaceCacheTests(TestCase):
             {'place': "Lowe's #625", 'ref': '625', 'status': 'created-place'},
         )
         place = Place.objects.get(name=place_name(brand, row.description, '625'))
-        self.assertEqual(place.address, "pending:Lowe's#625")
+        self.assertEqual(place.address, '')
+        self.assertEqual(place.brand, brand)
         self.assertEqual(Charge.objects.get().place, place)
         self.assertEqual(Charge.objects.get().raw_input, {'Description': 'LOWES #00625*'})
+
+    def test_place_latitude_longitude_is_blank_when_coordinate_missing(self):
+        place = Place.objects.create(address='', brand=Brand.objects.get(name="Lowe's"), name="Lowe's #625")
+        self.assertEqual(place.latitude_longitude, '')
 
     def test_create_charge_is_idempotent_for_same_row(self):
         first_place = Place.objects.create(
             address='625 Main St',
+            brand=Brand.objects.get(name="Lowe's"),
             mega_latitude=35_000_000,
             mega_longitude=-78_000_000,
             name="Lowe's #625",
