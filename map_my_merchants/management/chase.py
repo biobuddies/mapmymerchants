@@ -188,7 +188,7 @@ def resolve_missing_place_coordinates(
 ) -> list[dict[str, str]]:
     results = []
     for place in unresolved_places():
-        if (brand := place.brands.order_by('id').first()) is None:
+        if (brand := place.brand) is None:
             results.append({'place': place.name, 'status': 'missing-brand'})
             continue
         log_fields(event='resolve-place', brand=brand.name, place_name=place.name, store_ref=place.osm_ref)
@@ -199,6 +199,19 @@ def resolve_missing_place_coordinates(
             continue
         results.append(update_place_from_osm(place, brand, element))
     return results
+
+
+def refresh_place_from_osm_lookup(
+    place: Place,
+    osm_lookup: str,
+    overpass_url: str,
+    overpass_timeout_seconds: int,
+) -> dict[str, str]:
+    osm_type, osm_id = parsed_osm_lookup(osm_lookup)
+    element = fetch_osm_element(osm_type, osm_id, overpass_url, overpass_timeout_seconds)
+    if element is None:
+        raise RuntimeError(f'Unable to query Overpass for {osm_type}/{osm_id}')
+    return update_place_from_osm(place, place.brand, element)
 
 
 def overpass_query(brand: Brand, store_ref: str, overpass_timeout_seconds: int = 180) -> str:
@@ -240,6 +253,7 @@ def place_matches_brand(brand: Brand, place: Place) -> bool:
     place_name = place.name.partition(' #')[0]
     return any(
         (
+            place.brand_id == brand.id,
             tags.get('brand') == brand.name,
             bool(tags.get('name')) and bool(search_pattern(brand.match_pattern, tags['name'])),
             bool(place_name) and bool(search_pattern(brand.match_pattern, place_name)),
@@ -263,6 +277,56 @@ def best_element(brand: Brand, store_ref: str, elements: list[dict]) -> dict | N
     return max(matches, key=lambda element: element_score(brand, element))
 
 
+def fetch_osm_element(
+    osm_type: str,
+    osm_id: int,
+    overpass_url: str,
+    overpass_timeout_seconds: int,
+) -> dict | None:
+    query = osm_lookup_query(osm_type, osm_id, overpass_timeout_seconds)
+    log_fields(
+        event='osm-lookup-start',
+        osm_id=osm_id,
+        osm_type=osm_type,
+        overpass_url=overpass_url,
+        query=query,
+        timeout_seconds=overpass_timeout_seconds,
+    )
+    request = Request(
+        f'{overpass_url}?{urlencode({"data": query})}',
+        headers={'User-Agent': 'mapmymerchants/0'},
+    )
+    started_at = perf_counter()
+    try:
+        with urlopen(request, timeout=overpass_timeout_seconds) as response:
+            payload = load(response)
+    except (HTTPError, URLError, TimeoutError) as error:
+        elapsed_seconds = perf_counter() - started_at
+        log_fields(
+            elapsed_seconds=round(elapsed_seconds, 1),
+            error=repr(error),
+            event='osm-lookup-failed',
+            osm_id=osm_id,
+            osm_type=osm_type,
+            overpass_url=overpass_url,
+            query=query,
+            timeout_seconds=overpass_timeout_seconds,
+        )
+        raise RuntimeError(f'Unable to query Overpass for {osm_type}/{osm_id}') from error
+    elapsed_seconds = perf_counter() - started_at
+    log_fields(
+        elapsed_seconds=round(elapsed_seconds, 1),
+        element_count=len(payload.get('elements', [])),
+        event='osm-lookup-finished',
+        osm_id=osm_id,
+        osm_type=osm_type,
+        overpass_url=overpass_url,
+        query=query,
+        timeout_seconds=overpass_timeout_seconds,
+    )
+    return next((element for element in payload.get('elements', []) if element.get('id') == osm_id), None)
+
+
 def normalized_ref(value: str) -> str:
     digits = ''.join(character for character in value if character.isdigit())
     return digits.lstrip('0') or digits or value
@@ -274,6 +338,16 @@ def unresolved_places() -> tuple[Place, ...]:
         .exclude(osm_ref='')
         .order_by('id')
     )
+
+
+def osm_lookup_query(osm_type: str, osm_id: int, overpass_timeout_seconds: int) -> str:
+    return f'[out:json][timeout:{overpass_timeout_seconds}];{osm_type}({osm_id});out center tags;'
+
+
+def parsed_osm_lookup(value: str) -> tuple[str, int]:
+    if not (match := search(r'^(node|relation|way)/(\d+)$', value.strip())):
+        raise ValueError(f'Invalid OpenStreetMap lookup: {value}')
+    return match.group(1), int(match.group(2))
 
 
 def has_position(element: dict) -> bool:
@@ -329,9 +403,15 @@ def matching_charge(row: ChaseRow) -> Charge | None:
 def create_placeholder_place_and_charge(row: ChaseRow) -> dict[str, str]:
     place, _ = Place.objects.update_or_create(
         name=place_name(row.brand, row.description, row.store_ref),
-        defaults={'address': unresolved_place_address(row.brand, row.description, row.store_ref), 'osm_ref': row.store_ref},
+        defaults={
+            'address': unresolved_place_address(row.brand, row.description, row.store_ref),
+            'brand': row.brand,
+            'osm_ref': row.store_ref,
+        },
     )
-    place.brands.add(row.brand)
+    if place.brand_id != row.brand.id:
+        place.brand = row.brand
+        place.save(update_fields=('brand',))
     upsert_charge(row, place)
     result = {'place': place.name, 'status': 'created-place'}
     if row.store_ref:
@@ -341,6 +421,7 @@ def create_placeholder_place_and_charge(row: ChaseRow) -> dict[str, str]:
 
 def update_place_from_osm(place: Place, brand: Brand, element: dict) -> dict[str, str]:
     place.address = osm_address(element)
+    place.brand = brand
     place.mega_latitude = mega_coordinate(element_coordinate(element, 'lat'))
     place.mega_longitude = mega_coordinate(element_coordinate(element, 'lon'))
     place.osm_ref = normalized_ref(element.get('tags', {}).get('ref', '')) or place.osm_ref
@@ -349,7 +430,6 @@ def update_place_from_osm(place: Place, brand: Brand, element: dict) -> dict[str
     place.osm_response = element
     place.osm_type = element['type']
     place.save()
-    place.brands.add(brand)
     return {
         'brand': brand.name,
         'osm_id': str(place.osm_id),
@@ -360,7 +440,9 @@ def update_place_from_osm(place: Place, brand: Brand, element: dict) -> dict[str
 
 
 def reuse_place_and_create_charge(row: ChaseRow, place: Place) -> dict[str, str]:
-    place.brands.add(row.brand)
+    if place.brand_id != row.brand.id:
+        place.brand = row.brand
+        place.save(update_fields=('brand',))
     upsert_charge(row, place)
     result = {'place': place.name, 'status': 'reused-place'}
     if place.osm_id is not None:
@@ -375,7 +457,7 @@ def place_name(brand: Brand, description: str, store_ref: str) -> str:
 
 
 def unresolved_place_address(brand: Brand, description: str, store_ref: str) -> str:
-    return f'pending:{brand.name}#{store_ref}' if store_ref else f'pending:{description}'
+    return ''
 
 
 def osm_address(element: dict) -> str:

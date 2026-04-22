@@ -11,7 +11,6 @@ from django.db.models import (
     IntegerField,
     JSONField,
     Manager,
-    ManyToManyField,
     Model,
     PROTECT,
     UniqueConstraint,
@@ -75,9 +74,9 @@ class PlaceManager(Manager):
 
 
 class Place(Model):
-    address = TextField(blank=True, unique=True)
+    address = TextField(blank=True)
+    brand = ForeignKey(Brand, on_delete=PROTECT, related_name='places')
     created = DateTimeField(auto_now_add=True)
-    brands = ManyToManyField(Brand, related_name='places')
     mega_latitude = IntegerField(blank=True, null=True)
     mega_longitude = IntegerField(blank=True, null=True)
     name = TextField(unique=True)
@@ -99,6 +98,8 @@ class Place(Model):
 
     @property
     def latitude_longitude(self):
+        if self.mega_latitude is None or self.mega_longitude is None:
+            return ''
         return f'({self.mega_latitude / 1_000_000}, {self.mega_longitude / 1_000_000})'
 
     def set_mega_latitude_mega_longitude_from_address(self):
