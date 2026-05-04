@@ -63,13 +63,6 @@ def import_chase_rows(csv_path: Path) -> list[dict[str, str]]:
     return results
 
 
-def repair_statement_raw_input(csv_path: Path) -> list[dict[str, str]]:
-    statement = register_statement_path(csv_path)
-    rows = tuple(extract_chase_rows(statement))
-    log_fields(event='repair-raw-input', csv_path=str(csv_path), row_count=len(rows))
-    return [repair_charge_raw_input(row) for row in rows]
-
-
 def import_latest_places(csv_path: Path, overpass_url: str, overpass_timeout_seconds: int) -> list[dict[str, str]]:
     return import_chase_rows(csv_path)
 
@@ -401,27 +394,6 @@ def upsert_charge(row: ChaseRow, place: Place) -> Charge:
         },
     )
     return charge
-
-
-def repair_charge_raw_input(row: ChaseRow) -> dict[str, str]:
-    charge = matching_charge(row)
-    if charge is None:
-        return {'line_number': str(row.line_number), 'status': 'missing-charge'}
-    charge.raw_input = row.raw_input
-    charge.save(update_fields=('raw_input',))
-    return {'line_number': str(row.line_number), 'status': 'repaired-raw-input'}
-
-
-def matching_charge(row: ChaseRow) -> Charge | None:
-    if charge := Charge.objects.filter(line_number=row.line_number, statement=row.statement).first():
-        return charge
-    return Charge.objects.filter(
-        amount_usd=Decimal(f'{row.amount_usd:.2f}'),
-        description=row.description,
-        post_date=row.post_date.date(),
-        statement=row.statement,
-        transaction_date=row.transaction_date.date(),
-    ).first()
 
 
 def create_placeholder_place_and_charge(row: ChaseRow) -> dict[str, str]:
