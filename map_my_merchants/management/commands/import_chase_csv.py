@@ -1,8 +1,8 @@
 from pathlib import Path
 
-from django.core.management.base import BaseCommand, CommandError, CommandParser
+from django.core.management.base import BaseCommand, CommandParser
 
-from map_my_merchants.management.chase import import_chase_rows, register_statement_path, repair_statement_raw_input
+from map_my_merchants.management.chase import import_chase_rows, register_statement_path
 
 
 class Command(BaseCommand):
@@ -15,16 +15,9 @@ class Command(BaseCommand):
             action='store_true',
             help='Update the statement registry entry without importing charges or places.',
         )
-        parser.add_argument(
-            '--repair-raw-input',
-            action='store_true',
-            help='Rewrite raw_input for the existing first 30 imported rows from the CSV headers.',
-        )
 
     def handle(self, *args, **options) -> None:
         csv_path = options['csv_path']
-        if options['register_only'] and options['repair_raw_input']:
-            raise CommandError('Choose either --register-only or --repair-raw-input')
         if options['register_only']:
             statement = register_statement_path(csv_path)
             results = [
@@ -35,10 +28,6 @@ class Command(BaseCommand):
                     'status': 'registered-statement',
                 }
             ]
-        elif options['repair_raw_input']:
-            if not csv_path.exists():
-                raise CommandError(f'Missing CSV: {csv_path}')
-            results = repair_statement_raw_input(csv_path)
         else:
             results = import_chase_rows(csv_path)
         for result in results:
