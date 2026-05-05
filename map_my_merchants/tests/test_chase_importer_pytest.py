@@ -101,7 +101,7 @@ def test_resolve_missing_place_coordinates_updates_place_from_overpass(monkeypat
         '{"elements":[{"center":{"lat":35.868915,"lon":-78.718725},"id":47879843,'
         '"tags":{"addr:city":"Raleigh","addr:housenumber":"4831","addr:postcode":"27613",'
         '"addr:state":"NC","addr:street":"Grove Barton Road","brand":"Lowe\'s",'
-        '"name":"Lowe\'s","ref":"00625"},"type":"way"}]}'
+        '"brand:wikidata":"Q1373493","name":"Lowe\'s","ref":"00625"},"type":"way"}]}'
     ).encode()
     requests = []
 
@@ -133,10 +133,12 @@ def test_resolve_missing_place_coordinates_updates_place_from_overpass(monkeypat
     assert place.mega_longitude == -78_718_725
     assert place.osm_id == 47879843
     assert place.osm_type == 'way'
+    assert place.brand.wikidata_id == 'Q1373493'
     assert requests[0][1] == 5
     assert urlparse(requests[0][0]).netloc == 'overpass.invalid'
-    assert 'ref"~"0*625"' in parse_qs(urlparse(requests[0][0]).query)['data'][0]
-    assert 'brand"~"^Lowe.*s$"' in parse_qs(urlparse(requests[0][0]).query)['data'][0]
+    assert 'ref"~"625"' in parse_qs(urlparse(requests[0][0]).query)['data'][0]
+    assert 'brand"="Lowe\'s"' in parse_qs(urlparse(requests[0][0]).query)['data'][0]
+    assert 'name' not in parse_qs(urlparse(requests[0][0]).query)['data'][0]
 
 
 @mark.django_db
@@ -193,6 +195,67 @@ def test_parsed_osm_lookup_requires_type_and_numeric_id():
     assert chase.parsed_osm_lookup('way/47879843') == ('way', 47879843)
     with raises(ValueError, match='Invalid OpenStreetMap lookup'):
         chase.parsed_osm_lookup('47879843')
+
+
+@mark.django_db
+def test_resolve_place_by_name_query(monkeypatch, tmp_path):
+    csv_path = tmp_path / 'chase.csv'
+    csv_path.write_text(
+        'Transaction Date,Post Date,Description,Category,Type,Amount,Memo\n'
+        '04/17/2026,04/19/2026,TST* TRUGALUG CHOCOLATES,Food & Drink,Sale,-34.56,\n'
+    )
+    trugalug_payload = (
+        '{"elements":[{"id":13743849012,"lat":35.7785357,"lon":-78.6054177,'
+        '"tags":{"addr:city":"Raleigh","addr:housenumber":"2116 C",'
+        '"addr:postcode":"27610","addr:state":"NC","addr:street":"New Bern Avenue",'
+        '"building":"yes","name":"Trugalug Chocolates","shop":"chocolate",'
+        '"wheelchair":"yes"},"type":"node"}]}'
+    ).encode()
+    requests = []
+
+    class FakeResponse(BytesIO):
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            self.close()
+
+    def fake_urlopen(request, timeout):
+        requests.append((request.full_url, timeout))
+        query = parse_qs(urlparse(request.full_url).query)['data'][0]
+        assert '"name"~"TRUGALUG CHOCOLATES",i' in query
+        return FakeResponse(trugalug_payload)
+
+    monkeypatch.setattr(chase, 'urlopen', fake_urlopen)
+
+    assert chase.import_chase_rows(csv_path) == [
+        {'place': 'TRUGALUG CHOCOLATES', 'status': 'created-place'},
+    ]
+    place = Place.objects.get(name='TRUGALUG CHOCOLATES')
+    assert place.osm_ref == ''
+
+    results = chase.resolve_missing_place_coordinates(
+        'https://overpass.invalid/api/interpreter',
+        5,
+        place.id,
+    )
+    assert results == [
+        {
+            'brand': 'TRUGALUG CHOCOLATES',
+            'osm_id': '13743849012',
+            'place': 'Trugalug Chocolates',
+            'ref': '',
+            'status': 'resolved-place',
+        },
+    ]
+    assert len(requests) == 1
+    place.refresh_from_db()
+    assert place.address == '2116 C New Bern Avenue, Raleigh, NC, 27610'
+    assert place.mega_latitude == 35_778_536
+    assert place.mega_longitude == -78_605_418
+    assert place.osm_id == 13743849012
+    assert place.osm_type == 'node'
+    assert place.osm_response['tags']['shop'] == 'chocolate'
 
 
 def test_load_statement_tables_raises_when_registry_table_is_unavailable(monkeypatch):
