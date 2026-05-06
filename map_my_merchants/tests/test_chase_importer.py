@@ -78,11 +78,11 @@ class ChaseImporterTests(TestCase):
         brand, store_ref = matching_spec('CHICK-FIL-A #03376')
         self.assertEqual((brand.name, store_ref), ('Chick-fil-A', '3376'))
 
-    def test_overpass_query_regex_matches_zero_padded_and_trimmed_refs(self):
+    def test_overpass_query_uses_exact_brand_and_substring_ref(self):
         query = overpass_query(Brand.objects.get(name="Lowe's"), '625')
-        self.assertIn('["brand"~"^Lowe.*s$",i]["ref"~"0*625"]', query)
-        self.assertIn('["name"~"^Lowe.*s$",i]["ref"~"0*625"]', query)
+        self.assertIn('["brand"="Lowe\'s"]["ref"~"625"]', query)
         self.assertIn('[timeout:180]', query)
+        self.assertNotIn('name', query)
 
     def test_best_element_prefers_exact_brand_and_address(self):
         node = {
@@ -295,6 +295,6 @@ class ChaseImporterPlaceCacheTests(TestCase):
         self.assertEqual(Charge.objects.get().place, first_place)
         self.assertEqual(Charge.objects.get().raw_input['Memo'], 'updated')
 
-    def test_place_name_uses_description_when_store_ref_missing(self):
+    def test_place_name_uses_brand_name_when_store_ref_missing(self):
         brand = Brand.objects.get(name="Lowe's")
-        self.assertEqual(place_name(brand, 'LOWES RALEIGH', ''), 'LOWES RALEIGH')
+        self.assertEqual(place_name(brand, 'LOWES RALEIGH', ''), "Lowe's")

@@ -5,7 +5,7 @@ def load_brand_match_patterns(apps, schema_editor):
     Brand = apps.get_model('map_my_merchants', 'Brand')
     rules = {
         'Chick-fil-A': {
-            'chase_ref_pattern': r'\s+#?(?P<ref>\d+)',
+            'chase_ref_pattern': r'\s+#(?P<ref>\d+)',
             'match_pattern': r'^Chick.*fil.*A$',
         },
         'Food Lion': {
