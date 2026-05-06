@@ -43,5 +43,8 @@ test = [
 [tool.basedpyright]
 extends = '.biobuddies/basedpyright.toml'
 
+[tool.pytest.ini_options]
+DJANGO_SETTINGS_MODULE = 'config.settings'
+
 [tool.ruff]
 extend = '.biobuddies/ruff.toml'
