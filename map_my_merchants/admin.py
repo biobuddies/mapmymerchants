@@ -41,8 +41,8 @@ class PlaceAdminForm(forms.ModelForm):
 
 @admin.register(Brand)
 class BrandAdmin(admin.ModelAdmin):
-    list_display = ('name', 'wikidata_id', 'match_pattern', 'chase_ref_pattern', 'created', 'updated')
-    readonly_fields = ('id', 'chase_ref_pattern', 'created', 'match_pattern', 'name', 'updated', 'wikidata_id')
+    list_display = ('name', 'wikidata_id', 'match_pattern', 'ref_pattern', 'created', 'updated')
+    readonly_fields = ('id', 'ref_pattern', 'created', 'match_pattern', 'name', 'updated', 'wikidata_id')
 
     def has_add_permission(self, request):
         return False

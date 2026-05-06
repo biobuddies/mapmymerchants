@@ -37,7 +37,7 @@ class Platform(Model):
 
 
 class Brand(Model):
-    chase_ref_pattern = TextField(default=r'\s+#?(?P<ref>\d+)')
+    ref_pattern = TextField(default=r'\s+#?(?P<ref>\d+)')
     created = DateTimeField(auto_now_add=True)
     match_pattern = TextField(default='')
     wikidata_id = TextField(blank=True)

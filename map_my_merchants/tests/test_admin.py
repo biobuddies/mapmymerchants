@@ -24,7 +24,7 @@ class AdminTests(TestCase):
         self.assertFalse(self.brand_admin.has_delete_permission(self.request))
         self.assertEqual(
             self.brand_admin.get_readonly_fields(self.request),
-            ('id', 'chase_ref_pattern', 'created', 'match_pattern', 'name', 'updated', 'wikidata_id'),
+            ('id', 'ref_pattern', 'created', 'match_pattern', 'name', 'updated', 'wikidata_id'),
         )
 
     def test_charge_admin_only_allows_place_edit(self):
