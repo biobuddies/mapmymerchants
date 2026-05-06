@@ -43,7 +43,7 @@ def import_brands() -> tuple[Brand, ...]:
 
 def description_pattern(brand: Brand) -> Pattern[str]:
     brand_pattern = brand.match_pattern.removeprefix('^').removesuffix('$')
-    return compile(f'{brand_pattern}{brand.chase_ref_pattern}', IGNORECASE)
+    return compile(f'{brand_pattern}{brand.ref_pattern}', IGNORECASE)
 
 
 def import_chase_rows(csv_path: Path) -> list[dict[str, str]]:
