@@ -3,6 +3,7 @@ from pathlib import Path
 import sqlite_xsv
 from django.db import connection as default_connection
 from django.db.models import F, IntegerField, Model, TextField
+from django.db.utils import OperationalError
 
 
 def load_sqlite_xsv_connection(sender, connection, **kwargs) -> None:
@@ -10,14 +11,13 @@ def load_sqlite_xsv_connection(sender, connection, **kwargs) -> None:
         return
     if connection.connection is None:
         connection.ensure_connection()
-    if not getattr(connection, '_map_my_merchants_xsv_loaded', False):
-        raw_connection = connection.connection
-        raw_connection.enable_load_extension(True)
-        try:
-            raw_connection.load_extension(str(Path(sqlite_xsv.__file__).resolve().with_name('xsv0.dylib')))
-        finally:
-            raw_connection.enable_load_extension(False)
-        connection._map_my_merchants_xsv_loaded = True
+    raw_connection = connection.connection
+    raw_connection.enable_load_extension(True)
+    try:
+        raw_connection.load_extension(str(Path(sqlite_xsv.__file__).resolve().with_name('xsv0.dylib')))
+    finally:
+        raw_connection.enable_load_extension(False)
+    connection._map_my_merchants_xsv_loaded = True
     try:
         load_statement_tables(connection)
     except RuntimeError:
@@ -58,7 +58,11 @@ def refresh_statement_table(statement_id: int, source_path: str, connection=defa
     quoted_path = "'" + str(csv_path).replace("'", "''") + "'"
     with connection.cursor() as cursor:
         cursor.execute(f'drop table if exists temp.{table_name}')
-        cursor.execute(f'create virtual table temp.{table_name} using csv(filename={quoted_path}, header=1)')
+        try:
+            cursor.execute(f'create virtual table temp.{table_name} using csv(filename={quoted_path}, header=1)')
+        except OperationalError:
+            load_sqlite_xsv_connection(None, connection)
+            cursor.execute(f'create virtual table temp.{table_name} using csv(filename={quoted_path}, header=1)')
 
 
 def statement_csv_rows(statement, limit: int | None = None, connection=default_connection) -> tuple[tuple[int, dict[str, str]], ...]:
