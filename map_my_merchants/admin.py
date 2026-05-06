@@ -1,17 +1,23 @@
+from json import dumps
+
 from django import forms
 from django.contrib import admin
 from django.core.exceptions import ValidationError
 from django.db.models import Case, FloatField, TextField, Value, When
 from django.db.models.functions import Abs, Cast, Concat, Round
 from django.utils.html import format_html, format_html_join
+from django.utils.safestring import mark_safe
+from pygments import highlight
+from pygments.formatters import HtmlFormatter
+from pygments.lexers import JsonLexer
 
 from .management.chase import parsed_osm_lookup, refresh_place_from_osm_lookup
-from .models import Brand, Charge, Place, Statement
+from .models import Brand, Charge, Place, Platform, Statement
 from .xsv import preview_statement_data
 
 
 class PlaceAdminForm(forms.ModelForm):
-    osm_lookup = forms.CharField(required=False)
+    osm_lookup = forms.CharField(label='OpenStreetMap lookup', required=False)
 
     class Meta:
         model = Place
@@ -45,6 +51,11 @@ class BrandAdmin(admin.ModelAdmin):
         return False
 
 
+@admin.register(Platform)
+class PlatformAdmin(admin.ModelAdmin):
+    list_display = ('name', 'pattern')
+
+
 @admin.register(Charge)
 class ChargeAdmin(admin.ModelAdmin):
     fields = (
@@ -52,35 +63,33 @@ class ChargeAdmin(admin.ModelAdmin):
         'line_number',
         'transaction_date',
         'post_date',
+        'platform',
         'place',
         'amount_usd',
         'description',
         'raw_input_table',
-        'created',
-        'updated',
     )
     list_display = (
         'statement',
         'line_number',
         'transaction_date',
+        'platform',
         'place',
         'amount_usd',
         'description',
-        'created',
-        'updated',
     )
+    list_display_links = ('place',)
     readonly_fields = (
         'id',
         'amount_usd',
-        'created',
         'description',
         'line_number',
+        'platform',
         'post_date',
         'raw_input',
         'raw_input_table',
         'statement',
         'transaction_date',
-        'updated',
     )
 
     def has_add_permission(self, request):
@@ -130,7 +139,7 @@ class StatementAdmin(admin.ModelAdmin):
 @admin.register(Place)
 class PlaceAdmin(admin.ModelAdmin):
     form = PlaceAdminForm
-    fields = ('name', 'brand', 'osm_lookup', 'osm_link', 'address', 'coordinates', 'created')
+    fields = ('name', 'brand', 'osm_lookup', 'osm_link', 'osm_response_html', 'address', 'coordinates', 'created')
     list_display = ('name', 'brand', 'osm_link', 'address', 'coordinates', 'created')
     readonly_fields = (
         'id',
@@ -145,6 +154,7 @@ class PlaceAdmin(admin.ModelAdmin):
         'osm_link',
         'osm_ref',
         'osm_response',
+        'osm_response_html',
         'osm_type',
         'updated',
     )
@@ -177,7 +187,7 @@ class PlaceAdmin(admin.ModelAdmin):
             return ''
         return obj.coordinates
 
-    @admin.display(description='OpenStreetMap', ordering='osm_id')
+    @admin.display(description='OpenStreetMap link', ordering='osm_id')
     def osm_link(self, obj):
         if not obj.osm_id or not obj.osm_type:
             return ''
@@ -187,6 +197,15 @@ class PlaceAdmin(admin.ModelAdmin):
             obj.osm_id,
             f'{obj.osm_type}/{obj.osm_id}',
         )
+
+    @admin.display(description='OpenStreetMap response')
+    def osm_response_html(self, obj):
+        if not obj.osm_response:
+            return ''
+        formatter = HtmlFormatter(style='default')
+        highlighted = highlight(dumps(obj.osm_response, indent=2, sort_keys=True), JsonLexer(), formatter)
+        styles = formatter.get_style_defs()
+        return format_html('<style>{}</style>{}', mark_safe(styles), mark_safe(highlighted))
 
     def save_model(self, request, obj, form, change):
         osm_lookup = form.cleaned_data['osm_lookup']

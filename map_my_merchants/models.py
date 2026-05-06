@@ -3,6 +3,7 @@ from logging import getLogger
 
 from django.db.models import (
     BigIntegerField,
+    CASCADE,
     DateField,
     DateTimeField,
     DecimalField,
@@ -22,6 +23,17 @@ from django.utils.html import escape
 from geopy.geocoders import Nominatim
 
 logger = getLogger(__name__)
+
+
+class Platform(Model):
+    name = TextField(unique=True)
+    pattern = TextField()
+
+    class Meta:
+        ordering = ('name',)
+
+    def __str__(self):
+        return self.name
 
 
 class Brand(Model):
@@ -117,7 +129,6 @@ class Place(Model):
 
 class Charge(Model):
     amount_usd = DecimalField(decimal_places=2, max_digits=12)
-    created = DateTimeField(auto_now_add=True)
     description = TextField()
     line_number = IntegerField()
     place = ForeignKey(
@@ -127,9 +138,15 @@ class Charge(Model):
     )
     post_date = DateField()
     raw_input = JSONField(blank=True, default=dict)
+    platform = ForeignKey(
+        Platform,
+        blank=True,
+        null=True,
+        on_delete=PROTECT,
+        related_name='charges',
+    )
     statement = ForeignKey(Statement, on_delete=PROTECT, related_name='charges')
     transaction_date = DateField()
-    updated = DateTimeField(auto_now=True)
 
     class Meta:
         constraints = [
