@@ -16,11 +16,18 @@ class Command(BaseCommand):
             default=180,
             type=int,
         )
+        parser.add_argument(
+            '--place-id',
+            default=None,
+            type=int,
+            help='Resolve a specific place by primary key (default: all unresolved)',
+        )
 
     def handle(self, *args, **options) -> None:
         for result in resolve_missing_place_coordinates(
             options['overpass_url'],
             options['overpass_timeout_seconds'],
+            place_id=options['place_id'],
         ):
             fields = ' '.join(f'{key}={value}' for key, value in sorted(result.items()))
             self.stdout.write(fields)
