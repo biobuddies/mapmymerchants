@@ -2,7 +2,8 @@ from pathlib import Path
 from types import SimpleNamespace
 
 from django.contrib.admin.sites import AdminSite
-from django.test import RequestFactory, TestCase
+from django.contrib.auth.models import User
+from django.test import Client, RequestFactory, TestCase
 from django.utils.safestring import SafeString
 
 from map_my_merchants import admin as admin_module
@@ -34,15 +35,14 @@ class AdminTests(TestCase):
             (
                 'id',
                 'amount_usd',
-                'created',
                 'description',
                 'line_number',
+                'platform',
                 'post_date',
                 'raw_input',
                 'raw_input_table',
                 'statement',
                 'transaction_date',
-                'updated',
             ),
         )
 
@@ -120,6 +120,7 @@ class AdminTests(TestCase):
                 'osm_link',
                 'osm_ref',
                 'osm_response',
+                'osm_response_html',
                 'osm_type',
                 'updated',
             ),
@@ -148,3 +149,26 @@ class AdminTests(TestCase):
         )
 
         self.assertEqual(calls[0][0], (place, 'way/47879843'))
+
+
+class AdminLoadTests(TestCase):
+    def setUp(self):
+        User.objects.create_superuser('admin', 'admin@test.com', 'pass')
+        self.client = Client()
+        self.client.login(username='admin', password='pass')
+
+    def test_brand_admin_loads(self):
+        response = self.client.get('/admin/map_my_merchants/brand/')
+        self.assertEqual(response.status_code, 200)
+
+    def test_charge_admin_loads(self):
+        response = self.client.get('/admin/map_my_merchants/charge/')
+        self.assertEqual(response.status_code, 200)
+
+    def test_place_admin_loads(self):
+        response = self.client.get('/admin/map_my_merchants/place/')
+        self.assertEqual(response.status_code, 200)
+
+    def test_statement_admin_loads(self):
+        response = self.client.get('/admin/map_my_merchants/statement/')
+        self.assertEqual(response.status_code, 200)
