@@ -6,7 +6,7 @@ from html import unescape
 from json import dumps, load
 from logging import getLogger
 from pathlib import Path
-from re import IGNORECASE, Pattern, compile, escape as escape_pattern, search
+from re import IGNORECASE, Pattern, compile, search
 from time import perf_counter
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode
@@ -19,6 +19,37 @@ from map_my_merchants.xsv import refresh_statement_table, statement_csv_rows
 
 logger = getLogger(__name__)
 CSV_ROW_LIMIT = 30
+
+
+from functools import cache
+
+
+@cache
+def _platform_names() -> str:
+    return '|'.join(Platform.objects.values_list('name', flat=True).order_by('name'))
+
+
+def primary_pattern() -> Pattern[str]:
+    return compile(
+        rf'^(?:(?P<platform>{_platform_names()})\s*[* ]*)?'
+        rf'(?P<brand>.+?)\s+#?0*(?P<ref>\d+)\*?\s*(?P<detail>.+)?$',
+        IGNORECASE,
+    )
+
+
+def _normalize_name(name: str) -> str:
+    return ''.join(c for c in name.lower() if c.isalnum())
+
+
+def lookup_brand(brand_name: str) -> Brand:
+    brand_name = brand_name.strip()
+    if brand := Brand.objects.filter(name__iexact=brand_name).first():
+        return brand
+    normalized = _normalize_name(brand_name)
+    for brand in Brand.objects.all():
+        if _normalize_name(brand.name) == normalized:
+            return brand
+    return Brand.objects.create(name=brand_name)
 
 
 def log_fields(**fields: object) -> None:
@@ -35,15 +66,6 @@ class ChaseRow:
     statement: Statement
     store_ref: str
     transaction_date: datetime
-
-
-def import_brands() -> tuple[Brand, ...]:
-    return tuple(Brand.objects.exclude(match_pattern='').order_by('name'))
-
-
-def description_pattern(brand: Brand) -> Pattern[str]:
-    brand_pattern = brand.match_pattern.removeprefix('^').removesuffix('$')
-    return compile(f'{brand_pattern}{brand.ref_pattern}', IGNORECASE)
 
 
 def import_chase_rows(csv_path: Path) -> list[dict[str, str]]:
@@ -125,25 +147,16 @@ def update_statement_registry(statement: Statement, content_sha256: str, csv_pat
 
 
 def chase_brand_store_ref(description: str) -> tuple[Brand, str]:
-    if match := matching_spec(description):
-        return match
+    if match := primary_pattern().search(description):
+        brand = lookup_brand(match.group('brand'))
+        return brand, match.group('ref').lstrip('0') or '0'
     description = strip_platform_prefix(description)
     store_ref_match = search(r'\s+#?(?P<ref>\d+)\*?$', description)
     name = description[: store_ref_match.start()] if store_ref_match else description
     name = name.rstrip(' *').strip()
-    brand, _ = Brand.objects.get_or_create(
-        name=name,
-        defaults={'match_pattern': f'^{escape_pattern(name).replace(r"\\ ", r"\\s+")}$'},
-    )
+    brand, _ = Brand.objects.get_or_create(name=name)
     store_ref = (store_ref_match.group('ref').lstrip('0') or '0') if store_ref_match else ''
     return brand, store_ref
-
-
-def matching_spec(description: str) -> tuple[Brand, str] | None:
-    for brand in import_brands():
-        if match := description_pattern(brand).search(description):
-            return brand, match.group('ref').lstrip('0') or '0'
-    return None
 
 
 def parse_date(value: str) -> datetime:
@@ -288,14 +301,8 @@ def place_matches_brand(brand: Brand, place: Place) -> bool:
         (
             place.brand_id == brand.id,
             tags.get('brand') == brand.name,
-            bool(tags.get('name')) and bool(search_pattern(brand.match_pattern, tags['name'])),
-            bool(place_name) and bool(search_pattern(brand.match_pattern, place_name)),
         )
     )
-
-
-def search_pattern(pattern: str, value: str) -> bool:
-    return bool(compile(pattern, IGNORECASE).search(value))
 
 
 def best_element(brand: Brand, store_ref: str, elements: list[dict], search_name: str | None = None) -> dict | None:
