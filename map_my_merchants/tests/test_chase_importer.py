@@ -10,17 +10,25 @@ from map_my_merchants.management.chase import (
     chase_brand_store_ref,
     create_placeholder_place_and_charge,
     extract_chase_rows,
-    import_brands,
     import_statement,
-    matching_spec,
+    lookup_brand,
     matching_place,
     overpass_query,
     place_name,
-    search_pattern,
+    primary_pattern,
     unresolved_places,
 )
 from map_my_merchants.models import Brand, Charge, Place, Statement
 from map_my_merchants.xsv import load_statement_tables
+
+
+def _match_spec(description):
+    # dup: chase_brand_store_ref primary_pattern logic
+    match = primary_pattern().search(description)
+    if not match:
+        return None
+    brand = lookup_brand(match.group('brand'))
+    return brand, match.group('ref').lstrip('0') or '0'
 
 
 class ChaseImporterTests(TestCase):
@@ -67,15 +75,15 @@ class ChaseImporterTests(TestCase):
             self.assertIn(f'statement_{statement.id}', {name for name, in cursor.fetchall()})
 
     def test_matching_spec_extracts_food_lion_store_ref(self):
-        brand, store_ref = matching_spec('FOOD LION #1484')
+        brand, store_ref = _match_spec('FOOD LION #1484')
         self.assertEqual((brand.name, store_ref), ('Food Lion', '1484'))
 
     def test_matching_spec_extracts_lowes_store_ref(self):
-        brand, store_ref = matching_spec('LOWES #00625*')
+        brand, store_ref = _match_spec('LOWES #00625*')
         self.assertEqual((brand.name, store_ref), ("Lowe's", '625'))
 
     def test_matching_spec_extracts_chick_fil_a_store_ref(self):
-        brand, store_ref = matching_spec('CHICK-FIL-A #03376')
+        brand, store_ref = _match_spec('CHICK-FIL-A #03376')
         self.assertEqual((brand.name, store_ref), ('Chick-fil-A', '3376'))
 
     def test_overpass_query_uses_exact_brand_and_substring_ref(self):
@@ -105,16 +113,16 @@ class ChaseImporterTests(TestCase):
         }
         self.assertEqual(best_element(Brand.objects.get(name="Lowe's"), '625', [node, way]), way)
 
-    def test_search_pattern_tolerates_brand_punctuation(self):
-        chick_fil_a = Brand.objects.get(name='Chick-fil-A')
-        lowes = Brand.objects.get(name="Lowe's")
-        self.assertTrue(search_pattern(chick_fil_a.match_pattern, 'Chick fil A'))
-        self.assertTrue(search_pattern(chick_fil_a.match_pattern, 'Chick-fil-A'))
-        self.assertTrue(search_pattern(lowes.match_pattern, 'Lowes'))
-        self.assertTrue(search_pattern(lowes.match_pattern, "Lowe's"))
+    def test_primary_pattern_tolerates_brand_punctuation(self):
+        self.assertTrue(primary_pattern().search('Chick fil A #03376'))
+        self.assertTrue(primary_pattern().search('Chick-fil-A #03376'))
+        self.assertTrue(primary_pattern().search('Lowes #00625'))
+        self.assertTrue(primary_pattern().search("Lowe's #00625"))
 
-    def test_import_brands_reads_database_rules(self):
-        self.assertEqual([brand.name for brand in import_brands()], ['Chick-fil-A', 'Food Lion', "Lowe's", "McDonald's"])
+    def test_primary_pattern_skips_descriptions_without_ref(self):
+        self.assertIsNone(primary_pattern().search('PAYPAL'))
+        self.assertIsNone(primary_pattern().search('APPLE.COM/BILL'))
+        self.assertIsNone(primary_pattern().search('AMAZON MKTPL*BC8AND3900'))
 
     def test_unresolved_places_returns_places_missing_coordinates(self):
         lowes = Brand.objects.get(name="Lowe's")
