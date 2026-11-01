@@ -122,7 +122,8 @@ def preview_statement_data(statement, row_limit: int = 10) -> str:
         preview_model = type(f'StatementPreview{statement.id}', (Model,), attrs)
         rows = tuple(
             {field_name: '' if value is None else str(value) for field_name, value in row.items()}
-            for row in preview_model.objects.annotate(line_number=F('id'))
+            for row in preview_model.objects
+            .annotate(line_number=F('id'))
             .values(
                 'line_number',
                 'transaction_date',
@@ -140,9 +141,7 @@ def preview_statement_data(statement, row_limit: int = 10) -> str:
     if not rows:
         return ''
     field_names = tuple(rows[0].keys())
-    return '\n'.join(
-        (
-            '\t'.join(field_names),
-            *('\t'.join(row[field_name] for field_name in field_names) for row in rows),
-        )
-    )
+    return '\n'.join((
+        '\t'.join(field_names),
+        *('\t'.join(row[field_name] for field_name in field_names) for row in rows),
+    ))
