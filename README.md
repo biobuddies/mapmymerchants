@@ -5,7 +5,7 @@
 The goal is to take an export of credit card or debit card transactions and put those merchants on
 a Leaflet map.
 
-Unlike `mapmymates`, this project does not import from CardDAV, an address book, or VCF files.
+Unlike `mapmymates`, this project does not import from CardDAV, an address book, or VCF files. A cool stretch goal could be to create contacts in a secondary address book to allow transaction emails.
 
 Register a Chase CSV path without importing charges or places with:
 
@@ -27,3 +27,8 @@ Resolve coordinates for places missing them with:
 ```bash
 .venv/bin/python manage.py resolve_place_coordinates
 ```
+
+## TODO
+* Support the Coastal debit export, and any other useful exports
+* Switch to Decimal for latitude and longitude
+* Get reusable fields into django-plugin-field-day

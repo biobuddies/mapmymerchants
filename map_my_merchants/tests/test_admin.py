@@ -24,7 +24,7 @@ class AdminTests(TestCase):
         self.assertFalse(self.brand_admin.has_delete_permission(self.request))
         self.assertEqual(
             self.brand_admin.get_readonly_fields(self.request),
-            ('id', 'created', 'name', 'updated', 'wikidata_id'),
+            ('id', 'created', 'statement_name', 'updated', 'updated_by'),
         )
 
     def test_charge_admin_only_allows_place_edit(self):
@@ -49,7 +49,7 @@ class AdminTests(TestCase):
     def test_charge_admin_formats_raw_input_as_table(self):
         place = Place.objects.create(
             address='',
-            brand=Brand.objects.get(name="Lowe's"),
+            brand=Brand.objects.get(statement_name="Lowe's"),
             name="Lowe's #625",
         )
         statement = Statement.objects.create(
@@ -127,11 +127,11 @@ class AdminTests(TestCase):
         )
 
     def test_place_admin_hides_coordinates_when_incomplete(self):
-        place = Place.objects.create(address='', brand=Brand.objects.get(name="Lowe's"), name="Lowe's #625")
+        place = Place.objects.create(address='', brand=Brand.objects.get(statement_name="Lowe's"), name="Lowe's #625")
         self.assertEqual(self.place_admin.coordinates(place), '')
 
     def test_place_admin_save_model_refreshes_from_osm_lookup(self):
-        place = Place.objects.create(address='', brand=Brand.objects.get(name="Lowe's"), name="Lowe's #625")
+        place = Place.objects.create(address='', brand=Brand.objects.get(statement_name="Lowe's"), name="Lowe's #625")
         calls = []
 
         def fake_refresh(*args, **kwargs):

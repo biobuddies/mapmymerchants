@@ -29,16 +29,26 @@ cssbeautifier==1.15.4
 django==6.0.4
     # via
     #   mapmymerchants (pyproject.toml)
+    #   django-extensions
     #   django-leaflet
+    #   django-plugin-extensions
     #   djp
+django-extensions==4.1
+    # via
+    #   mapmymerchants (pyproject.toml)
+    #   django-plugin-extensions
 django-leaflet==0.33.0
+    # via mapmymerchants (pyproject.toml)
+django-plugin-extensions==0.1.2
     # via mapmymerchants (pyproject.toml)
 django-upgrade==1.30.0
     # via mapmymerchants (pyproject.toml)
 djlint==1.36.4
     # via mapmymerchants (pyproject.toml)
 djp==0.3.1
-    # via mapmymerchants (pyproject.toml)
+    # via
+    #   mapmymerchants (pyproject.toml)
+    #   django-plugin-extensions
 editorconfig==0.17.1
     # via
     #   cssbeautifier
@@ -49,7 +59,7 @@ geographiclib==2.1
     # via geopy
 geopy==2.4.1
     # via mapmymerchants (pyproject.toml)
-hadolint-py @ git+https://github.com/AleksaC/hadolint-py.git@446db46ab58b26eb8e40d5626c1229e8cf75b3b5
+hadolint-py @ git+https://github.com/AleksaC/hadolint-py.git@6e7504451511eaeb62a3e7f14d63b0296cbf86eb
     # via mapmymerchants (pyproject.toml)
 idna==3.11
     # via requests
