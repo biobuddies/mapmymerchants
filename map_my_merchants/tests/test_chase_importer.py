@@ -11,7 +11,7 @@ from map_my_merchants.management.chase import (
     create_placeholder_place_and_charge,
     extract_chase_rows,
     import_statement,
-    lookup_brand,
+    get_or_create_brand,
     matching_place,
     overpass_query,
     place_name,
@@ -27,7 +27,7 @@ def _match_spec(description):
     match = primary_pattern().search(description)
     if not match:
         return None
-    brand = lookup_brand(match.group('brand'))
+    brand = get_or_create_brand(match.group('brand'))
     return brand, match.group('ref').lstrip('0') or '0'
 
 
@@ -76,18 +76,18 @@ class ChaseImporterTests(TestCase):
 
     def test_matching_spec_extracts_food_lion_store_ref(self):
         brand, store_ref = _match_spec('FOOD LION #1484')
-        self.assertEqual((brand.name, store_ref), ('Food Lion', '1484'))
+        self.assertEqual((brand.statement_name, store_ref), ('Food Lion', '1484'))
 
     def test_matching_spec_extracts_lowes_store_ref(self):
         brand, store_ref = _match_spec('LOWES #00625*')
-        self.assertEqual((brand.name, store_ref), ("Lowe's", '625'))
+        self.assertEqual((brand.statement_name, store_ref), ("Lowe's", '625'))
 
     def test_matching_spec_extracts_chick_fil_a_store_ref(self):
         brand, store_ref = _match_spec('CHICK-FIL-A #03376')
-        self.assertEqual((brand.name, store_ref), ('Chick-fil-A', '3376'))
+        self.assertEqual((brand.statement_name, store_ref), ('Chick-fil-A', '3376'))
 
     def test_overpass_query_uses_exact_brand_and_substring_ref(self):
-        query = overpass_query(Brand.objects.get(name="Lowe's"), '625')
+        query = overpass_query(Brand.objects.get(statement_name="Lowe's"), '625')
         self.assertIn('["brand"="Lowe\'s"]["ref"~"625"]', query)
         self.assertIn('[timeout:180]', query)
         self.assertNotIn('name', query)
@@ -111,7 +111,7 @@ class ChaseImporterTests(TestCase):
             },
             'type': 'way',
         }
-        self.assertEqual(best_element(Brand.objects.get(name="Lowe's"), '625', [node, way]), way)
+        self.assertEqual(best_element(Brand.objects.get(statement_name="Lowe's"), '625', [node, way]), way)
 
     def test_primary_pattern_tolerates_brand_punctuation(self):
         self.assertTrue(primary_pattern().search('Chick fil A #03376'))
@@ -123,10 +123,28 @@ class ChaseImporterTests(TestCase):
         self.assertIsNone(primary_pattern().search('PAYPAL'))
         self.assertIsNone(primary_pattern().search('APPLE.COM/BILL'))
         self.assertIsNone(primary_pattern().search('AMAZON MKTPL*BC8AND3900'))
+        self.assertIsNone(primary_pattern().search('GOOGLE *FIBER 5vZ89S'))
+
+    def test_parse_amazon_dot_com_splits_on_star(self):
+        brand, store_ref = chase_brand_store_ref('Amazon.com*QL2EV0ET3')
+        self.assertEqual(brand.statement_name, 'Amazon.com')
+        self.assertEqual(store_ref, '')
+
+    def test_parse_amazon_mktpl_splits_on_star(self):
+        brand, store_ref = chase_brand_store_ref('AMAZON MKTPL*BA8391LM0')  # noqa: typos
+        self.assertEqual(brand.statement_name, 'AMAZON MKTPL')
+        self.assertEqual(store_ref, '')
+
+    def test_matching_spec_extracts_taco_bell_store_ref_without_hash(self):
+        brand, store_ref = _match_spec('TACO BELL 003279')
+        self.assertEqual((brand.statement_name, store_ref), ('TACO BELL', '3279'))
+
+    def test_primary_pattern_skips_365_market_phone_number(self):
+        self.assertIsNone(primary_pattern().search('365 Market 888 432-3299'))
 
     def test_unresolved_places_returns_places_missing_coordinates(self):
-        lowes = Brand.objects.get(name="Lowe's")
-        food_lion = Brand.objects.get(name='Food Lion')
+        lowes = Brand.objects.get(statement_name="Lowe's")
+        food_lion = Brand.objects.get(statement_name='Food Lion')
         Place.objects.create(
             address='1 Main St',
             brand=lowes,
@@ -147,7 +165,7 @@ class ChaseImporterTests(TestCase):
 class ChaseImporterPlaceCacheTests(TestCase):
     def test_matching_place_uses_store_ref_and_fuzzy_name(self):
         place = Place.objects.create(
-            brand=Brand.objects.get(name="Lowe's"),
+            brand=Brand.objects.get(statement_name="Lowe's"),
             mega_latitude=35_000_000,
             mega_longitude=-78_000_000,
             name="Lowe's #625",
@@ -156,16 +174,16 @@ class ChaseImporterPlaceCacheTests(TestCase):
             osm_response={'tags': {'brand': "Lowe's", 'name': "Lowe's"}},
             osm_type='way',
         )
-        self.assertEqual(matching_place(Brand.objects.get(name="Lowe's"), '625'), place)
+        self.assertEqual(matching_place(Brand.objects.get(statement_name="Lowe's"), '625'), place)
 
     def test_create_charge_links_brand_and_place(self):
         place = Place.objects.create(
-            brand=Brand.objects.get(name="Lowe's"),
+            brand=Brand.objects.get(statement_name="Lowe's"),
             mega_latitude=35_000_000,
             mega_longitude=-78_000_000,
             name="Lowe's #625",
         )
-        brand = Brand.objects.get(name="Lowe's")
+        brand = Brand.objects.get(statement_name="Lowe's")
         statement = Statement.objects.create(
             content_sha256='statement-1',
             source_name='statement-1.csv',
@@ -218,7 +236,7 @@ class ChaseImporterPlaceCacheTests(TestCase):
         )
 
     def test_create_placeholder_place_and_charge_links_charge(self):
-        brand = Brand.objects.get(name="Lowe's")
+        brand = Brand.objects.get(statement_name="Lowe's")
         statement = Statement.objects.create(
             content_sha256='statement-2',
             source_name='statement-2.csv',
@@ -246,18 +264,18 @@ class ChaseImporterPlaceCacheTests(TestCase):
         self.assertEqual(Charge.objects.get().raw_input, {'Description': 'LOWES #00625*'})
 
     def test_place_latitude_longitude_is_blank_when_coordinate_missing(self):
-        place = Place.objects.create(address='', brand=Brand.objects.get(name="Lowe's"), name="Lowe's #625")
+        place = Place.objects.create(address='', brand=Brand.objects.get(statement_name="Lowe's"), name="Lowe's #625")
         self.assertEqual(place.latitude_longitude, '')
 
     def test_create_charge_is_idempotent_for_same_row(self):
         first_place = Place.objects.create(
             address='625 Main St',
-            brand=Brand.objects.get(name="Lowe's"),
+            brand=Brand.objects.get(statement_name="Lowe's"),
             mega_latitude=35_000_000,
             mega_longitude=-78_000_000,
             name="Lowe's #625",
         )
-        brand = Brand.objects.get(name="Lowe's")
+        brand = Brand.objects.get(statement_name="Lowe's")
         statement = Statement.objects.create(
             content_sha256='statement-3',
             source_name='statement-3.csv',
@@ -304,5 +322,5 @@ class ChaseImporterPlaceCacheTests(TestCase):
         self.assertEqual(Charge.objects.get().raw_input['Memo'], 'updated')
 
     def test_place_name_uses_brand_name_when_store_ref_missing(self):
-        brand = Brand.objects.get(name="Lowe's")
+        brand = Brand.objects.get(statement_name="Lowe's")
         self.assertEqual(place_name(brand, 'LOWES RALEIGH', ''), "Lowe's")

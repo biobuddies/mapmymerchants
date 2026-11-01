@@ -1,6 +1,9 @@
 from ast import literal_eval
 from logging import getLogger
 
+from re import search
+
+from django.conf import settings
 from django.db.models import (
     BigIntegerField,
     CASCADE,
@@ -35,19 +38,30 @@ class Platform(Model):
     def __str__(self):
         return self.name
 
+    def save(self, *args, **kwargs) -> None:
+        super().save(*args, **kwargs)
+
 
 class Brand(Model):
     created = DateTimeField(auto_now_add=True)
     wikidata_id = TextField(blank=True)
     updated = DateTimeField(auto_now=True)
+    updated_by = ForeignKey(
+        settings.AUTH_USER_MODEL,
+        blank=True,
+        null=True,
+        on_delete=PROTECT,
+        related_name='brand_updates',
+    )
 
-    name = TextField(unique=True)
+    statement_name = TextField(unique=True, db_column='name')
+    display_name = TextField()
 
     class Meta:
         verbose_name_plural = 'Brands'
 
     def __str__(self):
-        return self.name
+        return self.display_name
 
 
 class Statement(Model):

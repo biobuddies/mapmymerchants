@@ -9,6 +9,8 @@ dependencies = [
     
     'django-leaflet',
     
+    'django-plugin-extensions',
+    'django-extensions',
     'djp',
     
     'geopy',

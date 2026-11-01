@@ -41,8 +41,11 @@ class PlaceAdminForm(forms.ModelForm):
 
 @admin.register(Brand)
 class BrandAdmin(admin.ModelAdmin):
-    list_display = ('name', 'wikidata_id', 'created', 'updated')
-    readonly_fields = ('id', 'created', 'name', 'updated', 'wikidata_id')
+    list_display = ('display_name', 'statement_name', 'wikidata_id', 'updated_by', 'created', 'updated')
+    readonly_fields = ('id', 'created', 'statement_name', 'updated', 'updated_by')
+    formfield_overrides = {
+        TextField: {'widget': forms.TextInput},
+    }
 
     def has_add_permission(self, request):
         return False
@@ -69,6 +72,7 @@ class ChargeAdmin(admin.ModelAdmin):
         'description',
         'raw_input_table',
     )
+    autocomplete_fields = ('place',)
     list_display = (
         'statement',
         'line_number',
@@ -141,6 +145,7 @@ class PlaceAdmin(admin.ModelAdmin):
     form = PlaceAdminForm
     fields = ('name', 'brand', 'osm_lookup', 'osm_link', 'osm_response_html', 'address', 'coordinates', 'created')
     list_display = ('name', 'brand', 'osm_link', 'address', 'coordinates', 'created')
+    search_fields = ('name',)
     readonly_fields = (
         'id',
         'address',
