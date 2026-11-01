@@ -6,12 +6,13 @@ from html import unescape
 from json import dumps, load
 from logging import getLogger
 from pathlib import Path
-from re import IGNORECASE, Pattern, compile, search
+from re import IGNORECASE, Pattern, compile, escape, search
 from time import perf_counter
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
+from django.contrib.auth import get_user_model
 from django.db.models import Q
 
 from map_my_merchants.models import Brand, Charge, Place, Platform, Statement
@@ -32,7 +33,7 @@ def _platform_names() -> str:
 def primary_pattern() -> Pattern[str]:
     return compile(
         rf'^(?:(?P<platform>{_platform_names()})\s*[* ]*)?'
-        rf'(?P<brand>.+?)\s+#?0*(?P<ref>\d+)\*?\s*(?P<detail>.+)?$',
+        rf'(?P<brand>.+?)\s+#*0*(?P<ref>\d+)(?![\s-]?\d|[a-zA-Z])\*?\s*(?P<detail>.+)?$',
         IGNORECASE,
     )
 
@@ -41,15 +42,24 @@ def _normalize_name(name: str) -> str:
     return ''.join(c for c in name.lower() if c.isalnum())
 
 
-def lookup_brand(brand_name: str) -> Brand:
+def get_or_create_brand(brand_name: str, pk: int | None = None, updated_by=None) -> Brand:
     brand_name = brand_name.strip()
-    if brand := Brand.objects.filter(name__iexact=brand_name).first():
+    target_name = brand_name.strip()
+    if pk is not None:
+        brand = Brand.objects.get(pk=pk)
+        if brand.statement_name != target_name and (not updated_by or not brand.updated_by_id or brand.updated_by_id == updated_by.id):
+            brand.statement_name = target_name
+            if updated_by:
+                brand.updated_by = updated_by
+            brand.save(update_fields=['statement_name'] if not updated_by else ['statement_name', 'updated_by'])
+        return brand
+    if brand := Brand.objects.filter(statement_name__iexact=brand_name).first():
         return brand
     normalized = _normalize_name(brand_name)
     for brand in Brand.objects.all():
-        if _normalize_name(brand.name) == normalized:
+        if _normalize_name(brand.statement_name) == normalized:
             return brand
-    return Brand.objects.create(name=brand_name)
+    return Brand.objects.create(statement_name=target_name, display_name=target_name, updated_by=updated_by)
 
 
 def log_fields(**fields: object) -> None:
@@ -70,11 +80,12 @@ class ChaseRow:
 
 def import_chase_rows(csv_path: Path) -> list[dict[str, str]]:
     statement = register_statement_path(csv_path)
-    rows = tuple(extract_chase_rows(statement))
+    updated_by = get_user_model().objects.get(username='from-statement')
+    rows = tuple(extract_chase_rows(statement, updated_by))
     log_fields(event='read-rows', csv_path=str(csv_path), row_count=len(rows))
     results = []
     for row in rows:
-        log_fields(event='import-place', brand=row.brand.name, store_ref=row.store_ref)
+        log_fields(event='import-place', brand=row.brand.display_name, store_ref=row.store_ref)
         if not row.store_ref:
             results.append(create_placeholder_place_and_charge(row))
             continue
@@ -108,13 +119,13 @@ def register_statement_path(csv_path: Path) -> Statement:
     return statement
 
 
-def extract_chase_rows(statement: Statement) -> list[ChaseRow]:
-    return [chase_row(line_number, row, statement) for line_number, row in statement_csv_rows(statement, CSV_ROW_LIMIT)]
+def extract_chase_rows(statement: Statement, updated_by=None) -> list[ChaseRow]:
+    return [chase_row(line_number, row, statement, updated_by) for line_number, row in statement_csv_rows(statement, CSV_ROW_LIMIT)]
 
 
-def chase_row(line_number: int, row: dict[str, str], statement: Statement) -> ChaseRow:
+def chase_row(line_number: int, row: dict[str, str], statement: Statement, updated_by=None) -> ChaseRow:
     raw_input = {key: unescape(value).strip() for key, value in row.items()}
-    brand, store_ref = chase_brand_store_ref(raw_input['Description'])
+    brand, store_ref = chase_brand_store_ref(raw_input['Description'], updated_by)
     return ChaseRow(
         amount_usd=abs(float(row['Amount'])),
         brand=brand,
@@ -146,17 +157,22 @@ def update_statement_registry(statement: Statement, content_sha256: str, csv_pat
     statement.save(update_fields=update_fields)
 
 
-def chase_brand_store_ref(description: str) -> tuple[Brand, str]:
+def parse_brand_store_ref(description: str) -> tuple[str, str]:
     if match := primary_pattern().search(description):
-        brand = lookup_brand(match.group('brand'))
-        return brand, match.group('ref').lstrip('0') or '0'
+        return match.group('brand'), match.group('ref').lstrip('0') or '0'
     description = strip_platform_prefix(description)
-    store_ref_match = search(r'\s+#?(?P<ref>\d+)\*?$', description)
-    name = description[: store_ref_match.start()] if store_ref_match else description
-    name = name.rstrip(' *').strip()
-    brand, _ = Brand.objects.get_or_create(name=name)
-    store_ref = (store_ref_match.group('ref').lstrip('0') or '0') if store_ref_match else ''
-    return brand, store_ref
+    if store_ref_match := search(r'\s+#?(?P<ref>\d+)\*?$', description):
+        name = description[:store_ref_match.start()]
+        store_ref = store_ref_match.group('ref').lstrip('0') or '0'
+        return name, store_ref
+    if star_match := search(r'^(?P<brand>.+?)\s*\*', description):
+        return star_match.group('brand'), ''
+    return description, ''
+
+
+def chase_brand_store_ref(description: str, updated_by=None) -> tuple[Brand, str]:
+    brand_name, store_ref = parse_brand_store_ref(description)
+    return get_or_create_brand(brand_name, updated_by=updated_by), store_ref
 
 
 def parse_date(value: str) -> datetime:
@@ -173,10 +189,10 @@ def find_osm_element(
         query = overpass_query(brand, store_ref, overpass_timeout_seconds)
         search_name = None
     else:
-        search_name = strip_platform_prefix(brand.name)
+        search_name = strip_platform_prefix(brand.display_name)
         query = name_query(search_name, overpass_timeout_seconds)
     log_fields(
-        brand=brand.name,
+        brand=brand.display_name,
         event='overpass-request-start',
         overpass_url=overpass_url,
         query=query,
@@ -195,7 +211,7 @@ def find_osm_element(
     except (HTTPError, URLError, TimeoutError) as error:
         elapsed_seconds = perf_counter() - started_at
         log_fields(
-            brand=brand.name,
+            brand=brand.display_name,
             elapsed_seconds=round(elapsed_seconds, 1),
             error=repr(error),
             event='overpass-request-failed',
@@ -204,10 +220,10 @@ def find_osm_element(
             store_ref=store_ref,
             timeout_seconds=overpass_timeout_seconds,
         )
-        raise RuntimeError(f"Unable to query Overpass for {search_name or f'{brand.name} #{store_ref}'}") from error
+        raise RuntimeError(f"Unable to query Overpass for {search_name or f'{brand.display_name} #{store_ref}'}") from error
     elapsed_seconds = perf_counter() - started_at
     log_fields(
-        brand=brand.name,
+        brand=brand.display_name,
         elapsed_seconds=round(elapsed_seconds, 1),
         element_count=len(payload.get('elements', [])),
         event='overpass-request-finished',
@@ -224,24 +240,29 @@ def resolve_missing_place_coordinates(
     overpass_url: str,
     overpass_timeout_seconds: int,
     place_id: int | None = None,
+    limit: int | None = None,
 ) -> list[dict[str, str]]:
+    updated_by = get_user_model().objects.get(username='from-openstreetmap')
     places = (
         (Place.objects.get(id=place_id),)
         if place_id is not None
-        else unresolved_places()
+        else unresolved_places(limit=limit)
     )
     results = []
     for place in places:
         if (brand := place.brand) is None:
             results.append({'place': place.name, 'status': 'missing-brand'})
             continue
-        log_fields(event='resolve-place', brand=brand.name, place_name=place.name, store_ref=place.osm_ref)
+        log_fields(event='resolve-place', brand=brand.display_name, place_name=place.name, store_ref=place.osm_ref)
         element = find_osm_element(brand, place.osm_ref, overpass_url, overpass_timeout_seconds)
         if element is None:
-            log_fields(event='missing-osm', brand=brand.name, place_name=place.name, store_ref=place.osm_ref)
-            results.append({'brand': brand.name, 'place': place.name, 'ref': place.osm_ref, 'status': 'missing-osm'})
+            log_fields(event='missing-osm', brand=brand.display_name, place_name=place.name, store_ref=place.osm_ref)
+            if not place.osm_response:
+                place.osm_response = {'queried': True}
+                place.save(update_fields=['osm_response'])
+            results.append({'brand': brand.display_name, 'place': place.name, 'ref': place.osm_ref, 'status': 'missing-osm'})
             continue
-        results.append(update_place_from_osm(place, brand, element))
+        results.append(update_place_from_osm(place, brand, element, updated_by))
     return results
 
 
@@ -251,17 +272,18 @@ def refresh_place_from_osm_lookup(
     overpass_url: str,
     overpass_timeout_seconds: int,
 ) -> dict[str, str]:
+    updated_by = get_user_model().objects.get(username='from-openstreetmap')
     osm_type, osm_id = parsed_osm_lookup(osm_lookup)
     element = fetch_osm_element(osm_type, osm_id, overpass_url, overpass_timeout_seconds)
     if element is None:
         raise RuntimeError(f'Unable to query Overpass for {osm_type}/{osm_id}')
-    return update_place_from_osm(place, place.brand, element)
+    return update_place_from_osm(place, place.brand, element, updated_by)
 
 
 def overpass_query(brand: Brand, store_ref: str, overpass_timeout_seconds: int = 180) -> str:
     return (
         f'[out:json][timeout:{overpass_timeout_seconds}];'
-        f'nwr["brand"="{brand.name}"]["ref"~"{store_ref}"];'
+        f'nwr["brand"="{brand.display_name}"]["ref"~"{store_ref}"];'
         'out center tags;'
     )
 
@@ -284,7 +306,7 @@ def matching_place(brand: Brand, store_ref: str) -> Place | None:
         return None
     place = matches[0]
     log_fields(
-        brand=brand.name,
+        brand=brand.display_name,
         event='place-cache-hit',
         osm_id=place.osm_id,
         osm_type=place.osm_type,
@@ -300,7 +322,7 @@ def place_matches_brand(brand: Brand, place: Place) -> bool:
     return any(
         (
             place.brand_id == brand.id,
-            tags.get('brand') == brand.name,
+            tags.get('brand') == brand.display_name,
         )
     )
 
@@ -376,11 +398,16 @@ def normalized_ref(value: str) -> str:
     return digits.lstrip('0') or digits or value
 
 
-def unresolved_places() -> tuple[Place, ...]:
-    return tuple(
+def unresolved_places(limit: int | None = None) -> tuple[Place, ...]:
+    qs = (
         Place.objects.filter(Q(mega_latitude__isnull=True) | Q(mega_longitude__isnull=True))
+        .exclude(brand__places__name='Online')
+        .exclude(Q(osm_response__isnull=False) & ~Q(osm_response={}))
         .order_by('id')
     )
+    if limit is not None:
+        qs = qs[:limit]
+    return tuple(qs)
 
 
 def osm_lookup_query(osm_type: str, osm_id: int, overpass_timeout_seconds: int) -> str:
@@ -400,25 +427,35 @@ def has_position(element: dict) -> bool:
 def element_score(brand: Brand, element: dict) -> tuple[int, int, int]:
     tags = element.get('tags', {})
     return (
-        int(tags.get('brand') == brand.name),
+        int(tags.get('brand') == brand.display_name),
         int(bool(tags.get('addr:housenumber')) and bool(tags.get('addr:street'))),
         {'node': 3, 'way': 2, 'relation': 1}.get(element.get('type'), 0),
     )
 
 
+def _platform_regex():
+    platforms = list(Platform.objects.all())
+    platforms.sort(key=lambda p: len(p.pattern), reverse=True)
+    patterns = [p.pattern.lstrip('^') for p in platforms]
+    return (
+        compile('^(' + '|'.join(map(escape, patterns)) + ')[ *]+', IGNORECASE),
+        {p.pattern.upper(): p for p in platforms},
+    )
+
+
 def matching_platform(description: str) -> Platform | None:
-    for platform in Platform.objects.all():
-        if search(platform.pattern, description):
-            return platform
+    regex, pattern_to_platform = _platform_regex()
+    if match := regex.search(description):
+        return pattern_to_platform.get(match.group(1).upper())
     return None
 
 
 def strip_platform_prefix(description: str) -> str:
-    for platform in Platform.objects.all():
-        if match := search(platform.pattern, description):
-            stripped = description[match.end():].lstrip(' *')
-            if stripped != description:
-                return stripped
+    regex, _ = _platform_regex()
+    if match := regex.search(description):
+        stripped = description[match.end():].lstrip(' *')
+        if stripped != description:
+            return stripped
     return description.rstrip(' *')
 
 
@@ -439,35 +476,65 @@ def upsert_charge(row: ChaseRow, place: Place) -> Charge:
     return charge
 
 
-def create_placeholder_place_and_charge(row: ChaseRow) -> dict[str, str]:
+def get_or_create_place(
+    brand: Brand,
+    name: str,
+    store_ref: str,
+    pk: int | None = None,
+) -> Place:
+    if pk is not None:
+        place = Place.objects.get(pk=pk)
+        place.brand = brand
+        place.name = name
+        place.osm_ref = store_ref
+        place.save(update_fields=['brand', 'name', 'osm_ref'])
+        return place
     place, _ = Place.objects.update_or_create(
-        name=place_name(row.brand, row.description, row.store_ref),
+        name=name,
         defaults={
-            'address': unresolved_place_address(row.brand, row.description, row.store_ref),
-            'brand': row.brand,
-            'osm_ref': row.store_ref,
+            'address': '',
+            'brand': brand,
+            'osm_ref': store_ref,
         },
     )
-    if place.brand_id != row.brand.id:
-        place.brand = row.brand
-        place.save(update_fields=('brand',))
+    if place.brand_id != brand.id:
+        place.brand = brand
+        place.save(update_fields=['brand'])
+    return place
+
+
+def create_placeholder_place_and_charge(row: ChaseRow) -> dict[str, str]:
+    if online_place := row.brand.places.filter(name='Online').first():
+        place = online_place
+        status = 'reused-online'
+    else:
+        place = get_or_create_place(
+            brand=row.brand,
+            name=place_name(row.brand, row.description, row.store_ref),
+            store_ref=row.store_ref,
+        )
+        status = 'created-place'
     upsert_charge(row, place)
-    result = {'place': place.name, 'status': 'created-place'}
+    result = {'place': place.name, 'status': status}
     if row.store_ref:
         result['ref'] = row.store_ref
     return result
 
 
-def update_place_from_osm(place: Place, brand: Brand, element: dict) -> dict[str, str]:
+def update_place_from_osm(place: Place, brand: Brand, element: dict, updated_by=None) -> dict[str, str]:
     tags = element.get('tags', {})
-    brand_name = tags.get('brand', '')
-    if brand_name and brand.name != brand_name:
-        brand.name = brand_name
-        brand.save(update_fields=('name',))
+    brand_name = tags.get('brand') or tags.get('name', '')
+    if brand_name and brand.display_name != brand_name:
+        brand.display_name = brand_name
+        if updated_by:
+            brand.updated_by = updated_by
+        brand.save(update_fields=('display_name',) if not updated_by else ('display_name', 'updated_by'))
     wikidata_id = tags.get('brand:wikidata', '')
     if wikidata_id and brand.wikidata_id != wikidata_id:
         brand.wikidata_id = wikidata_id
-        brand.save(update_fields=('wikidata_id',))
+        if updated_by:
+            brand.updated_by = updated_by
+        brand.save(update_fields=('wikidata_id',) if not updated_by else ('wikidata_id', 'updated_by'))
     place.address = osm_address(element)
     place.brand = brand
     place.mega_latitude = mega_coordinate(element_coordinate(element, 'lat'))
@@ -476,14 +543,14 @@ def update_place_from_osm(place: Place, brand: Brand, element: dict) -> dict[str
     place.name = (
         place_name(brand, '', place.osm_ref)
         if place.osm_ref
-        else tags.get('name') or brand.name
+        else tags.get('name') or brand.display_name
     )
     place.osm_id = element['id']
     place.osm_response = element
     place.osm_type = element['type']
     place.save()
     return {
-        'brand': brand.name,
+        'brand': brand.display_name,
         'osm_id': str(place.osm_id),
         'place': place.name,
         'ref': place.osm_ref,
@@ -505,7 +572,7 @@ def reuse_place_and_create_charge(row: ChaseRow, place: Place) -> dict[str, str]
 
 
 def place_name(brand: Brand, description: str, store_ref: str) -> str:
-    return f'{brand.name} #{store_ref}' if store_ref else brand.name
+    return f'{brand.display_name} #{store_ref}' if store_ref else brand.display_name
 
 
 def unresolved_place_address(brand: Brand, description: str, store_ref: str) -> str:

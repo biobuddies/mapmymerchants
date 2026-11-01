@@ -22,13 +22,24 @@ def load_brand_match_patterns(apps, schema_editor):
         },
     }
     for name, fields in rules.items():
-        Brand.objects.update_or_create(name=name, defaults=fields)
+        brand, created = Brand.objects.update_or_create(name=name, defaults=fields)
+        if created and not brand.display_name:
+            brand.display_name = name
+            brand.save(update_fields=['display_name'])
+        elif not brand.display_name:
+            Brand.objects.filter(pk=brand.pk).update(display_name=name)
 
 
 class Migration(migrations.Migration):
     dependencies = [('map_my_merchants', '0006_charge_charge_identity_unique')]
 
     operations = [
+        migrations.AddField(
+            model_name='brand',
+            name='display_name',
+            field=models.TextField(blank=True, null=True),
+            preserve_default=False,
+        ),
         migrations.AddField(
             model_name='brand',
             name='chase_ref_pattern',

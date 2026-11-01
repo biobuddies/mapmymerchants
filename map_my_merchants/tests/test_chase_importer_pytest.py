@@ -93,7 +93,7 @@ def test_import_chase_csv_register_only_creates_statement_registry_entry(tmp_pat
 def test_resolve_missing_place_coordinates_updates_place_from_overpass(monkeypatch):
     place = Place.objects.create(
         address='',
-        brand=Brand.objects.get(name="Lowe's"),
+        brand=Brand.objects.get(statement_name="Lowe's"),
         name="Lowe's #625",
         osm_ref='625',
     )
@@ -145,7 +145,7 @@ def test_resolve_missing_place_coordinates_updates_place_from_overpass(monkeypat
 def test_refresh_place_from_osm_lookup_updates_place_from_explicit_osm_id(monkeypatch):
     place = Place.objects.create(
         address='',
-        brand=Brand.objects.get(name="Lowe's"),
+        brand=Brand.objects.get(statement_name="Lowe's"),
         name="Lowe's #625",
     )
     payload = (
@@ -241,7 +241,7 @@ def test_resolve_place_by_name_query(monkeypatch, tmp_path):
     )
     assert results == [
         {
-            'brand': 'TRUGALUG CHOCOLATES',
+            'brand': 'Trugalug Chocolates',
             'osm_id': '13743849012',
             'place': 'Trugalug Chocolates',
             'ref': '',
@@ -271,3 +271,14 @@ def test_load_statement_tables_raises_when_registry_table_is_unavailable(monkeyp
 
     with raises(RuntimeError, match='Statement registry table is unavailable'):
         xsv.load_statement_tables(FakeConnection())
+
+
+@mark.django_db
+def test_chase_brand_store_ref_matches_existing_brand_case_insensitively():
+    Brand.objects.create(statement_name='Tap Station', display_name='Tap Station')
+
+    brand, store_ref = chase.chase_brand_store_ref('TST* TAP STATION')
+
+    assert brand.statement_name == 'Tap Station'
+    assert Brand.objects.filter(statement_name='Tap Station').count() == 1
+    assert store_ref == ''

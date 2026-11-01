@@ -22,12 +22,19 @@ class Command(BaseCommand):
             type=int,
             help='Resolve a specific place by primary key (default: all unresolved)',
         )
+        parser.add_argument(
+            '--limit',
+            default=None,
+            type=int,
+            help='Limit the number of unresolved places to process',
+        )
 
     def handle(self, *args, **options) -> None:
         for result in resolve_missing_place_coordinates(
             options['overpass_url'],
             options['overpass_timeout_seconds'],
             place_id=options['place_id'],
+            limit=options['limit'],
         ):
             fields = ' '.join(f'{key}={value}' for key, value in sorted(result.items()))
             self.stdout.write(fields)
