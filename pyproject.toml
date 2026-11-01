@@ -8,6 +8,8 @@ version = '0'
 dependencies = [
     
     'django',
+    'django-extensions',
+    'django-plugin-extensions',
     
     'django-leaflet',
     
