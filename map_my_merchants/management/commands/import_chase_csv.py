@@ -11,7 +11,7 @@ from map_my_merchants.management.chase import (
     place_name,
     register_statement_path,
 )
-from map_my_merchants.models import Brand, Charge, Place, Statement
+from map_my_merchants.models import Charge, Place, Statement
 
 
 class Command(BaseCommand):
@@ -94,10 +94,7 @@ class Command(BaseCommand):
         )
         target_place_name = place_name(brand, description, store_ref)
         place = get_or_create_place(
-            brand=brand,
-            name=target_place_name,
-            store_ref=store_ref,
-            pk=charge.place_id if charge.place_id else None,
+            brand=brand, name=target_place_name, store_ref=store_ref, pk=charge.place_id or None
         )
 
         changed = []

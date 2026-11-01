@@ -1,12 +1,12 @@
 from io import BytesIO
 from urllib.parse import parse_qs, urlparse
 
-from pytest import mark, raises
 from django.core.management import call_command
+from pytest import mark, raises
 
+from map_my_merchants import xsv
 from map_my_merchants.management import chase
 from map_my_merchants.models import Brand, Charge, Place, Statement
-from map_my_merchants import xsv
 
 
 @mark.django_db
@@ -102,11 +102,11 @@ def test_resolve_missing_place_coordinates_updates_place_from_overpass(monkeypat
         osm_ref='625',
     )
     payload = (
-        '{"elements":[{"center":{"lat":35.868915,"lon":-78.718725},"id":47879843,'
-        '"tags":{"addr:city":"Raleigh","addr:housenumber":"4831","addr:postcode":"27613",'
-        '"addr:state":"NC","addr:street":"Grove Barton Road","brand":"Lowe\'s",'
-        '"brand:wikidata":"Q1373493","name":"Lowe\'s","ref":"00625"},"type":"way"}]}'
-    ).encode()
+        b'{"elements":[{"center":{"lat":35.868915,"lon":-78.718725},"id":47879843,'
+        b'"tags":{"addr:city":"Raleigh","addr:housenumber":"4831","addr:postcode":"27613",'
+        b'"addr:state":"NC","addr:street":"Grove Barton Road","brand":"Lowe\'s",'
+        b'"brand:wikidata":"Q1373493","name":"Lowe\'s","ref":"00625"},"type":"way"}]}'
+    )
     requests = []
 
     class FakeResponse(BytesIO):
@@ -153,11 +153,11 @@ def test_refresh_place_from_osm_lookup_updates_place_from_explicit_osm_id(monkey
         address='', brand=Brand.objects.get(statement_name="Lowe's"), name="Lowe's #625"
     )
     payload = (
-        '{"elements":[{"center":{"lat":35.868915,"lon":-78.718725},"id":47879843,'
-        '"tags":{"addr:city":"Raleigh","addr:housenumber":"4831","addr:postcode":"27613",'
-        '"addr:state":"NC","addr:street":"Grove Barton Road","brand":"Lowe\'s",'
-        '"name":"Lowe\'s","ref":"00625"},"type":"way"}]}'
-    ).encode()
+        b'{"elements":[{"center":{"lat":35.868915,"lon":-78.718725},"id":47879843,'
+        b'"tags":{"addr:city":"Raleigh","addr:housenumber":"4831","addr:postcode":"27613",'
+        b'"addr:state":"NC","addr:street":"Grove Barton Road","brand":"Lowe\'s",'
+        b'"name":"Lowe\'s","ref":"00625"},"type":"way"}]}'
+    )
     requests = []
 
     class FakeResponse(BytesIO):
@@ -206,12 +206,12 @@ def test_resolve_place_by_name_query(monkeypatch, tmp_path):
         '04/17/2026,04/19/2026,TST* TRUGALUG CHOCOLATES,Food & Drink,Sale,-34.56,\n'
     )
     trugalug_payload = (
-        '{"elements":[{"id":13743849012,"lat":35.7785357,"lon":-78.6054177,'
-        '"tags":{"addr:city":"Raleigh","addr:housenumber":"2116 C",'
-        '"addr:postcode":"27610","addr:state":"NC","addr:street":"New Bern Avenue",'
-        '"building":"yes","name":"Trugalug Chocolates","shop":"chocolate",'
-        '"wheelchair":"yes"},"type":"node"}]}'
-    ).encode()
+        b'{"elements":[{"id":13743849012,"lat":35.7785357,"lon":-78.6054177,'
+        b'"tags":{"addr:city":"Raleigh","addr:housenumber":"2116 C",'
+        b'"addr:postcode":"27610","addr:state":"NC","addr:street":"New Bern Avenue",'
+        b'"building":"yes","name":"Trugalug Chocolates","shop":"chocolate",'
+        b'"wheelchair":"yes"},"type":"node"}]}'
+    )
     requests = []
 
     class FakeResponse(BytesIO):

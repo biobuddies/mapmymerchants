@@ -284,14 +284,12 @@ def resolve_missing_place_coordinates(
             if not place.osm_response:
                 place.osm_response = {'queried': True}
                 place.save(update_fields=['osm_response'])
-            results.append(
-                {
-                    'brand': brand.display_name,
-                    'place': place.name,
-                    'ref': place.osm_ref,
-                    'status': 'missing-osm',
-                }
-            )
+            results.append({
+                'brand': brand.display_name,
+                'place': place.name,
+                'ref': place.osm_ref,
+                'status': 'missing-osm',
+            })
             continue
         results.append(update_place_from_osm(place, brand, element, updated_by))
     return results
@@ -423,7 +421,8 @@ def normalized_ref(value: str) -> str:
 
 def unresolved_places(limit: int | None = None) -> tuple[Place, ...]:
     qs = (
-        Place.objects.filter(Q(mega_latitude__isnull=True) | Q(mega_longitude__isnull=True))
+        Place.objects
+        .filter(Q(mega_latitude__isnull=True) | Q(mega_longitude__isnull=True))
         .exclude(brand__places__name='Online')
         .exclude(Q(osm_response__isnull=False) & ~Q(osm_response={}))
         .order_by('id')
