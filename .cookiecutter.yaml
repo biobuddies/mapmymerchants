@@ -2,7 +2,9 @@ default_context:
     languages: Node,Python
     python_dependencies:
         - django
+        - django-extensions
         - django-leaflet
+        - django-plugin-extensions
         - djp
         - geopy
         - sqlite-xsv
