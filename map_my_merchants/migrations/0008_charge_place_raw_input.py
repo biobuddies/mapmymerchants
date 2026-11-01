@@ -1,5 +1,5 @@
-from django.db import migrations, models
 import django.db.models.deletion
+from django.db import migrations, models
 
 
 def charge_place_name(brand_name, description, store_ref):

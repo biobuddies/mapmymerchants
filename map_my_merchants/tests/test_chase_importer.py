@@ -1,8 +1,8 @@
 from datetime import datetime
 from pathlib import Path
 
-from django.test import TestCase
 from django.db import connection
+from django.test import TestCase
 
 from map_my_merchants.management.chase import (
     ChaseRow,
@@ -10,8 +10,8 @@ from map_my_merchants.management.chase import (
     chase_brand_store_ref,
     create_placeholder_place_and_charge,
     extract_chase_rows,
-    import_statement,
     get_or_create_brand,
+    import_statement,
     matching_place,
     overpass_query,
     place_name,
