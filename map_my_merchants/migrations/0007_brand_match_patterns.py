@@ -8,14 +8,8 @@ def load_brand_match_patterns(apps, schema_editor):
             'chase_ref_pattern': r'\s+#(?P<ref>\d+)',
             'match_pattern': r'^Chick.*fil.*A$',
         },
-        'Food Lion': {
-            'chase_ref_pattern': r'\s+#?(?P<ref>\d+)',
-            'match_pattern': r'^Food.*Lion$',
-        },
-        "Lowe's": {
-            'chase_ref_pattern': r'\s+#?(?P<ref>\d+)',
-            'match_pattern': r'^Lowe.*s$',
-        },
+        'Food Lion': {'chase_ref_pattern': r'\s+#?(?P<ref>\d+)', 'match_pattern': r'^Food.*Lion$'},
+        "Lowe's": {'chase_ref_pattern': r'\s+#?(?P<ref>\d+)', 'match_pattern': r'^Lowe.*s$'},
         "McDonald's": {
             'chase_ref_pattern': r'(?:\s+#?|\s+)(?P<ref>\d+)',
             'match_pattern': r'^McDonald.*s$',
@@ -46,9 +40,7 @@ class Migration(migrations.Migration):
             field=models.TextField(default=r'\s+#?(?P<ref>\d+)'),
         ),
         migrations.AddField(
-            model_name='brand',
-            name='match_pattern',
-            field=models.TextField(default=''),
+            model_name='brand', name='match_pattern', field=models.TextField(default='')
         ),
         migrations.RunPython(load_brand_match_patterns, migrations.RunPython.noop),
     ]

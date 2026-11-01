@@ -4,18 +4,9 @@ from django.db import migrations
 
 
 class Migration(migrations.Migration):
-
-    dependencies = [
-        ('map_my_merchants', '0020_populate_brand_pattern'),
-    ]
+    dependencies = [('map_my_merchants', '0020_populate_brand_pattern')]
 
     operations = [
-        migrations.RemoveField(
-            model_name='brand',
-            name='match_pattern',
-        ),
-        migrations.RemoveField(
-            model_name='brand',
-            name='ref_pattern',
-        ),
+        migrations.RemoveField(model_name='brand', name='match_pattern'),
+        migrations.RemoveField(model_name='brand', name='ref_pattern'),
     ]

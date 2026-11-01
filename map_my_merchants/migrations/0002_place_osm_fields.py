@@ -10,14 +10,8 @@ class Migration(migrations.Migration):
             name='osm_id',
             field=models.BigIntegerField(blank=True, null=True, unique=True),
         ),
+        migrations.AddField(model_name='place', name='osm_ref', field=models.TextField(blank=True)),
         migrations.AddField(
-            model_name='place',
-            name='osm_ref',
-            field=models.TextField(blank=True),
-        ),
-        migrations.AddField(
-            model_name='place',
-            name='osm_type',
-            field=models.TextField(blank=True),
+            model_name='place', name='osm_type', field=models.TextField(blank=True)
         ),
     ]

@@ -14,7 +14,9 @@ def backfill_place_brand(apps, schema_editor):
         through_rows = place.brands.order_by('id')
         brand = through_rows.first()
         if brand is None:
-            brand, _ = Brand.objects.get_or_create(name=place_brand_name(place), defaults={'match_pattern': ''})
+            brand, _ = Brand.objects.get_or_create(
+                name=place_brand_name(place), defaults={'match_pattern': ''}
+            )
         place.brand = brand
         place.save(update_fields=('brand',))
 

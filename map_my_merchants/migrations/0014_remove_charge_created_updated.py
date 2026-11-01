@@ -4,18 +4,9 @@ from django.db import migrations
 
 
 class Migration(migrations.Migration):
-
-    dependencies = [
-        ('map_my_merchants', '0013_online_place'),
-    ]
+    dependencies = [('map_my_merchants', '0013_online_place')]
 
     operations = [
-        migrations.RemoveField(
-            model_name='charge',
-            name='created',
-        ),
-        migrations.RemoveField(
-            model_name='charge',
-            name='updated',
-        ),
+        migrations.RemoveField(model_name='charge', name='created'),
+        migrations.RemoveField(model_name='charge', name='updated'),
     ]

@@ -4,14 +4,21 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
-    dependencies = [
-        ('map_my_merchants', '0005_rename_business_brand_add_charge'),
-    ]
+    dependencies = [('map_my_merchants', '0005_rename_business_brand_add_charge')]
 
     operations = [
         migrations.AddConstraint(
             model_name='charge',
-            constraint=models.UniqueConstraint(fields=('brand', 'amount_usd', 'description', 'post_date', 'store_ref', 'transaction_date'), name='charge_identity_unique'),
-        ),
+            constraint=models.UniqueConstraint(
+                fields=(
+                    'brand',
+                    'amount_usd',
+                    'description',
+                    'post_date',
+                    'store_ref',
+                    'transaction_date',
+                ),
+                name='charge_identity_unique',
+            ),
+        )
     ]

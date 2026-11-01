@@ -17,7 +17,9 @@ def test_import_chase_rows_creates_placeholder_places(monkeypatch, tmp_path):
         '04/17/2026,04/19/2026,FOOD LION #1484,Groceries,Sale,-46.20,\n'
         '04/18/2026,04/19/2026,LOWES #00625*,Home,Sale,-244.18,\n'
     )
-    monkeypatch.setattr(chase, 'urlopen', lambda request, timeout: (_ for _ in ()).throw(AssertionError))
+    monkeypatch.setattr(
+        chase, 'urlopen', lambda request, timeout: (_ for _ in ()).throw(AssertionError)
+    )
 
     assert chase.import_chase_rows(csv_path) == [
         {'place': 'Food Lion #1484', 'ref': '1484', 'status': 'created-place'},
@@ -49,7 +51,9 @@ def test_import_chase_rows_reads_only_first_30_csv_rows(monkeypatch, tmp_path):
         'Transaction Date,Post Date,Description,Category,Type,Amount,Memo\n'
         + ''.join(rows[index % len(rows)] for index in range(32))
     )
-    monkeypatch.setattr(chase, 'urlopen', lambda request, timeout: (_ for _ in ()).throw(AssertionError))
+    monkeypatch.setattr(
+        chase, 'urlopen', lambda request, timeout: (_ for _ in ()).throw(AssertionError)
+    )
 
     assert len(chase.import_chase_rows(csv_path)) == 30
     assert Charge.objects.count() == 30
@@ -118,7 +122,9 @@ def test_resolve_missing_place_coordinates_updates_place_from_overpass(monkeypat
 
     monkeypatch.setattr(chase, 'urlopen', fake_urlopen)
 
-    assert chase.resolve_missing_place_coordinates('https://overpass.invalid/api/interpreter', 5) == [
+    assert chase.resolve_missing_place_coordinates(
+        'https://overpass.invalid/api/interpreter', 5
+    ) == [
         {
             'brand': "Lowe's",
             'osm_id': '47879843',
@@ -144,9 +150,7 @@ def test_resolve_missing_place_coordinates_updates_place_from_overpass(monkeypat
 @mark.django_db
 def test_refresh_place_from_osm_lookup_updates_place_from_explicit_osm_id(monkeypatch):
     place = Place.objects.create(
-        address='',
-        brand=Brand.objects.get(statement_name="Lowe's"),
-        name="Lowe's #625",
+        address='', brand=Brand.objects.get(statement_name="Lowe's"), name="Lowe's #625"
     )
     payload = (
         '{"elements":[{"center":{"lat":35.868915,"lon":-78.718725},"id":47879843,'
@@ -170,10 +174,7 @@ def test_refresh_place_from_osm_lookup_updates_place_from_explicit_osm_id(monkey
     monkeypatch.setattr(chase, 'urlopen', fake_urlopen)
 
     assert chase.refresh_place_from_osm_lookup(
-        place,
-        'way/47879843',
-        'https://overpass.invalid/api/interpreter',
-        5,
+        place, 'way/47879843', 'https://overpass.invalid/api/interpreter', 5
     ) == {
         'brand': "Lowe's",
         'osm_id': '47879843',
@@ -229,15 +230,13 @@ def test_resolve_place_by_name_query(monkeypatch, tmp_path):
     monkeypatch.setattr(chase, 'urlopen', fake_urlopen)
 
     assert chase.import_chase_rows(csv_path) == [
-        {'place': 'TRUGALUG CHOCOLATES', 'status': 'created-place'},
+        {'place': 'TRUGALUG CHOCOLATES', 'status': 'created-place'}
     ]
     place = Place.objects.get(name='TRUGALUG CHOCOLATES')
     assert place.osm_ref == ''
 
     results = chase.resolve_missing_place_coordinates(
-        'https://overpass.invalid/api/interpreter',
-        5,
-        place.id,
+        'https://overpass.invalid/api/interpreter', 5, place.id
     )
     assert results == [
         {
@@ -246,7 +245,7 @@ def test_resolve_place_by_name_query(monkeypatch, tmp_path):
             'place': 'Trugalug Chocolates',
             'ref': '',
             'status': 'resolved-place',
-        },
+        }
     ]
     assert len(requests) == 1
     place.refresh_from_db()

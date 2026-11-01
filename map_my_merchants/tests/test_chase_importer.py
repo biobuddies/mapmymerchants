@@ -39,7 +39,9 @@ class ChaseImporterTests(TestCase):
         first = import_statement(csv_path)
         second = import_statement(csv_path)
         self.assertEqual(first.id, second.id)
-        self.assertEqual(Statement.objects.filter(source_name='tmp-test-import-statement.csv').count(), 1)
+        self.assertEqual(
+            Statement.objects.filter(source_name='tmp-test-import-statement.csv').count(), 1
+        )
 
     def test_extract_chase_rows_reads_registered_statement_path(self):
         csv_path = Path('/tmp/tmp-test-extract-chase-rows.csv')
@@ -72,7 +74,7 @@ class ChaseImporterTests(TestCase):
 
         with connection.cursor() as cursor:
             cursor.execute("select name from sqlite_temp_master where type = 'table'")
-            self.assertIn(f'statement_{statement.id}', {name for name, in cursor.fetchall()})
+            self.assertIn(f'statement_{statement.id}', {name for (name,) in cursor.fetchall()})
 
     def test_matching_spec_extracts_food_lion_store_ref(self):
         brand, store_ref = _match_spec('FOOD LION #1484')
@@ -111,7 +113,9 @@ class ChaseImporterTests(TestCase):
             },
             'type': 'way',
         }
-        self.assertEqual(best_element(Brand.objects.get(statement_name="Lowe's"), '625', [node, way]), way)
+        self.assertEqual(
+            best_element(Brand.objects.get(statement_name="Lowe's"), '625', [node, way]), way
+        )
 
     def test_primary_pattern_tolerates_brand_punctuation(self):
         self.assertTrue(primary_pattern().search('Chick fil A #03376'))
@@ -154,10 +158,7 @@ class ChaseImporterTests(TestCase):
             osm_ref='625',
         )
         unresolved = Place.objects.create(
-            address='',
-            brand=food_lion,
-            name='Food Lion #1484',
-            osm_ref='1484',
+            address='', brand=food_lion, name='Food Lion #1484', osm_ref='1484'
         )
         self.assertEqual(unresolved_places(), (unresolved,))
 
@@ -264,7 +265,9 @@ class ChaseImporterPlaceCacheTests(TestCase):
         self.assertEqual(Charge.objects.get().raw_input, {'Description': 'LOWES #00625*'})
 
     def test_place_latitude_longitude_is_blank_when_coordinate_missing(self):
-        place = Place.objects.create(address='', brand=Brand.objects.get(statement_name="Lowe's"), name="Lowe's #625")
+        place = Place.objects.create(
+            address='', brand=Brand.objects.get(statement_name="Lowe's"), name="Lowe's #625"
+        )
         self.assertEqual(place.latitude_longitude, '')
 
     def test_create_charge_is_idempotent_for_same_row(self):
