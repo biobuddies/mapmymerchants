@@ -106,7 +106,10 @@ pytest==9.0.3
     # via
     #   mapmymerchants (pyproject.toml)
     #   pytest-cov
+    #   pytest-django
 pytest-cov==7.1.0
+    # via mapmymerchants (pyproject.toml)
+pytest-django==4.14.0
     # via mapmymerchants (pyproject.toml)
 python-dateutil==2.9.0.post0
     # via arrow

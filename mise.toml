@@ -1,0 +1,6 @@
+[bootstrap.packages]
+'apt:gdal-bin' = { os = 'linux' }
+'brew:gdal' = { os = 'macos' }
+
+[hooks]
+postinstall = 'mise bootstrap packages apply --yes'

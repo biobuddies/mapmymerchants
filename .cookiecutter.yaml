@@ -6,3 +6,6 @@ default_context:
         - djp
         - geopy
         - sqlite-xsv
+    python_optional_dependencies:
+        test:
+            - pytest-django

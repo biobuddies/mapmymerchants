@@ -23,6 +23,7 @@ jobs:
             - uses: jdx/mise-action@v3
               with:
                   experimental: true
+                  version: 2026.11.0
             - run: mise set-environment
             - run: mise pre-commit-all
     tabularize:
@@ -36,6 +37,7 @@ jobs:
             - uses: jdx/mise-action@v3
               with:
                   experimental: true
+                  version: 2026.11.0
             - run: mise tabularize
     test:
         runs-on: ubuntu-latest
@@ -48,6 +50,7 @@ jobs:
             - uses: jdx/mise-action@v3
               with:
                   experimental: true
+                  version: 2026.11.0
             - run: |
                   # shellcheck disable=SC2086
                   mkdir -p $HOME/code
