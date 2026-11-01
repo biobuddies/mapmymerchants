@@ -1,5 +1,5 @@
 [project]
-description = ''
+description = 'Map merchants from card transactions'
 name = 'mapmymerchants'
 readme = 'README.md'
 requires-python = '>=3.12'
@@ -7,11 +7,10 @@ version = '0'
 
 dependencies = [
     
-    'django',
+    'django-plugin-extensions',
     
     'django-leaflet',
     
-    'djp',
     
     'geopy',
     
