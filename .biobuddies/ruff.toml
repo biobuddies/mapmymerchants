@@ -2,6 +2,8 @@ line-length = 100
 target-version = 'py312'
 
 [format]
+docstring-code-format = true
+preview = true
 quote-style = 'single'
 skip-magic-trailing-comma = true
 
@@ -12,12 +14,14 @@ ignore = [
     'ANN401', # `**kwargs: Any` is reasonable
     'BLE001', # except Exception is okay
     'COM812', # Insists on `join([],)` over `join([])`
+    'CPY001', # Git records authors and dates
     'D101',
     'D103',
     'D104',
     'D107',
     'EM101',  # Simple code is more important than simple tracebacks
     'EM102',  # Simple code is more important than simple tracebacks
+    'FBT001', # What is bad about Boolean parameters?
     'FIX002', # Don't make the perfect the enemy of the good
     'INP001',
     # Demystify magic values with good variable names, comments, or other context. Follow
@@ -46,7 +50,11 @@ parametrize-values-type = 'tuple'
 split-on-trailing-comma = false
 
 [lint.per-file-ignores]
-'**/test*.py' = [
+# Command line interfaces by path; followup: detect [project.scripts] targets and __main__ guards
+'**/{__main__,management/commands/*,manage,scripts/*}.py' = [
+    'T201', # Command line interfaces print
+]
+'**/{conftest,test*}.py' = [
     'ANN201',  # -> None doesn't improve pytest functions
     'N802',    # Test functions can match class names
     'PLR2004', # Tests can have magic values
