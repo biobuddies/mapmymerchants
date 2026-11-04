@@ -4,36 +4,45 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     initial = True
 
-    dependencies = [
-    ]
+    dependencies = []
 
     operations = [
         migrations.CreateModel(
             name='Business',
             fields=[
-                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
+                (
+                    'id',
+                    models.BigAutoField(
+                        auto_created=True, primary_key=True, serialize=False, verbose_name='ID'
+                    ),
+                ),
                 ('created', models.DateTimeField(auto_now_add=True)),
                 ('updated', models.DateTimeField(auto_now=True)),
                 ('name', models.TextField(unique=True)),
             ],
-            options={
-                'verbose_name_plural': 'Businesses',
-            },
+            options={'verbose_name_plural': 'Businesses'},
         ),
         migrations.CreateModel(
             name='Place',
             fields=[
-                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
+                (
+                    'id',
+                    models.BigAutoField(
+                        auto_created=True, primary_key=True, serialize=False, verbose_name='ID'
+                    ),
+                ),
                 ('address', models.TextField(blank=True, unique=True)),
                 ('created', models.DateTimeField(auto_now_add=True)),
                 ('mega_latitude', models.IntegerField(blank=True, null=True)),
                 ('mega_longitude', models.IntegerField(blank=True, null=True)),
                 ('name', models.TextField(unique=True)),
                 ('updated', models.DateTimeField(auto_now=True)),
-                ('businesses', models.ManyToManyField(related_name='places', to='map_my_merchants.business')),
+                (
+                    'businesses',
+                    models.ManyToManyField(related_name='places', to='map_my_merchants.business'),
+                ),
             ],
         ),
     ]

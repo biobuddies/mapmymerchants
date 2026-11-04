@@ -10,7 +10,9 @@ class Migration(migrations.Migration):
             fields=[
                 (
                     'id',
-                    models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID'),
+                    models.BigAutoField(
+                        auto_created=True, primary_key=True, serialize=False, verbose_name='ID'
+                    ),
                 ),
                 ('created', models.DateTimeField(auto_now_add=True)),
                 ('endpoint', models.TextField()),
@@ -25,22 +27,18 @@ class Migration(migrations.Migration):
             field=models.JSONField(blank=True, default=dict),
         ),
         migrations.AlterField(
-            model_name='place',
-            name='osm_id',
-            field=models.BigIntegerField(blank=True, null=True),
+            model_name='place', name='osm_id', field=models.BigIntegerField(blank=True, null=True)
         ),
         migrations.AddConstraint(
             model_name='osmquerycache',
             constraint=models.UniqueConstraint(
-                fields=('endpoint', 'query'),
-                name='osm_query_cache_endpoint_query_unique',
+                fields=('endpoint', 'query'), name='osm_query_cache_endpoint_query_unique'
             ),
         ),
         migrations.AddConstraint(
             model_name='place',
             constraint=models.UniqueConstraint(
-                fields=('osm_type', 'osm_id'),
-                name='place_osm_type_osm_id_unique',
+                fields=('osm_type', 'osm_id'), name='place_osm_type_osm_id_unique'
             ),
         ),
     ]

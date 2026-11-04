@@ -20,7 +20,4 @@ from django.urls import path
 
 from map_my_merchants.views import map_view
 
-urlpatterns = [
-    path('', map_view, name='map'),
-    path('admin/', admin.site.urls),
-]
+urlpatterns = [path('', map_view, name='map'), path('admin/', admin.site.urls)]

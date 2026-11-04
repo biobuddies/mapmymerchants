@@ -48,9 +48,7 @@ class AdminTests(TestCase):
 
     def test_charge_admin_formats_raw_input_as_table(self):
         place = Place.objects.create(
-            address='',
-            brand=Brand.objects.get(statement_name="Lowe's"),
-            name="Lowe's #625",
+            address='', brand=Brand.objects.get(statement_name="Lowe's"), name="Lowe's #625"
         )
         statement = Statement.objects.create(
             content_sha256='statement-1',
@@ -80,7 +78,15 @@ class AdminTests(TestCase):
         self.assertFalse(self.statement_admin.has_delete_permission(self.request))
         self.assertEqual(
             self.statement_admin.get_readonly_fields(self.request),
-            ('id', 'content_sha256', 'created', 'source_name', 'source_path', 'source_preview', 'updated'),
+            (
+                'id',
+                'content_sha256',
+                'created',
+                'source_name',
+                'source_path',
+                'source_preview',
+                'updated',
+            ),
         )
 
     def test_statement_admin_previews_source_data(self):
@@ -127,11 +133,15 @@ class AdminTests(TestCase):
         )
 
     def test_place_admin_hides_coordinates_when_incomplete(self):
-        place = Place.objects.create(address='', brand=Brand.objects.get(statement_name="Lowe's"), name="Lowe's #625")
+        place = Place.objects.create(
+            address='', brand=Brand.objects.get(statement_name="Lowe's"), name="Lowe's #625"
+        )
         self.assertEqual(self.place_admin.coordinates(place), '')
 
     def test_place_admin_save_model_refreshes_from_osm_lookup(self):
-        place = Place.objects.create(address='', brand=Brand.objects.get(statement_name="Lowe's"), name="Lowe's #625")
+        place = Place.objects.create(
+            address='', brand=Brand.objects.get(statement_name="Lowe's"), name="Lowe's #625"
+        )
         calls = []
 
         def fake_refresh(*args, **kwargs):

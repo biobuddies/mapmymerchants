@@ -10,10 +10,7 @@ def create_unknown_place_and_reassign(apps, schema_editor):
     brand = Brand.objects.filter(name='TROPICAL SMOOTHIE CAFE NC').first()
     if brand is None:
         return
-    unknown, _ = Place.objects.get_or_create(
-        name='Unknown',
-        defaults={'brand': brand},
-    )
+    unknown, _ = Place.objects.get_or_create(name='Unknown', defaults={'brand': brand})
 
     charges_to_reassign = Charge.objects.filter(description=F('place__name'))
     orphaned_place_ids = set(charges_to_reassign.values_list('place_id', flat=True))
@@ -25,4 +22,6 @@ def create_unknown_place_and_reassign(apps, schema_editor):
 class Migration(migrations.Migration):
     dependencies = [('map_my_merchants', '0014_remove_charge_created_updated')]
 
-    operations = [migrations.RunPython(create_unknown_place_and_reassign, migrations.RunPython.noop)]
+    operations = [
+        migrations.RunPython(create_unknown_place_and_reassign, migrations.RunPython.noop)
+    ]
