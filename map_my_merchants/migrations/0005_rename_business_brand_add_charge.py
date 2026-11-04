@@ -13,7 +13,9 @@ class Migration(migrations.Migration):
             fields=[
                 (
                     'id',
-                    models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID'),
+                    models.BigAutoField(
+                        auto_created=True, primary_key=True, serialize=False, verbose_name='ID'
+                    ),
                 ),
                 ('amount_usd', models.DecimalField(decimal_places=2, max_digits=12)),
                 ('created', models.DateTimeField(auto_now_add=True)),

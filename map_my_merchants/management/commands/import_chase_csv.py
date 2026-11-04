@@ -59,10 +59,9 @@ class Command(BaseCommand):
         updated_by = get_user_model().objects.get(username='from-statement')
         line_numbers = self._parse_line_range(line_spec)
         statement = Statement.objects.get(source_name=source_name)
-        charges = Charge.objects.filter(
-            statement=statement,
-            line_number__in=line_numbers,
-        ).order_by('line_number')
+        charges = Charge.objects.filter(statement=statement, line_number__in=line_numbers).order_by(
+            'line_number'
+        )
 
         if not charges:
             self.stderr.write(f'No charges for {source_name!r} lines {line_spec}.')
@@ -91,9 +90,7 @@ class Command(BaseCommand):
 
         brand_name, store_ref = parse_brand_store_ref(description)
         brand = get_or_create_brand(
-            brand_name,
-            pk=charge.place.brand_id if charge.place_id else None,
-            updated_by=updated_by,
+            brand_name, pk=charge.place.brand_id if charge.place_id else None, updated_by=updated_by
         )
         target_place_name = place_name(brand, description, store_ref)
         place = get_or_create_place(
@@ -110,9 +107,7 @@ class Command(BaseCommand):
             changed.append(f'place: {old_place_name!r} -> {place.name!r}')
 
         if changed:
-            self.stdout.write(
-                f'line {charge.line_number}: ' + ', '.join(changed)
-            )
+            self.stdout.write(f'line {charge.line_number}: ' + ', '.join(changed))
         else:
             self.stdout.write(f'line {charge.line_number}: unchanged')
 
@@ -124,9 +119,5 @@ class Command(BaseCommand):
                 place.delete()
                 if not Place.objects.filter(brand=brand).exists():
                     brand.delete()
-                    self.stdout.write(
-                        f'Orphan brand {brand.id} ({brand.display_name!r}) deleted.'
-                    )
-                self.stdout.write(
-                    f'Orphan place {place_id} ({place.name!r}) deleted.'
-                )
+                    self.stdout.write(f'Orphan brand {brand.id} ({brand.display_name!r}) deleted.')
+                self.stdout.write(f'Orphan place {place_id} ({place.name!r}) deleted.')

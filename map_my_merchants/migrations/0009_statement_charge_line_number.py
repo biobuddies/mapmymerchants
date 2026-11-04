@@ -6,8 +6,7 @@ def backfill_charge_statement(apps, schema_editor):
     Charge = apps.get_model('map_my_merchants', 'Charge')
     Statement = apps.get_model('map_my_merchants', 'Statement')
     statement, _ = Statement.objects.get_or_create(
-        content_sha256='legacy-import',
-        defaults={'source_name': 'legacy-import', 'source_path': ''},
+        content_sha256='legacy-import', defaults={'source_name': 'legacy-import', 'source_path': ''}
     )
     for line_number, charge in enumerate(Charge.objects.order_by('id'), start=1):
         charge.line_number = line_number
@@ -22,7 +21,12 @@ class Migration(migrations.Migration):
         migrations.CreateModel(
             name='Statement',
             fields=[
-                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
+                (
+                    'id',
+                    models.BigAutoField(
+                        auto_created=True, primary_key=True, serialize=False, verbose_name='ID'
+                    ),
+                ),
                 ('content_sha256', models.TextField(unique=True)),
                 ('created', models.DateTimeField(auto_now_add=True)),
                 ('source_name', models.TextField()),
@@ -47,15 +51,8 @@ class Migration(migrations.Migration):
             ),
         ),
         migrations.RunPython(backfill_charge_statement, migrations.RunPython.noop),
-        migrations.RemoveConstraint(
-            model_name='charge',
-            name='charge_identity_unique',
-        ),
-        migrations.AlterField(
-            model_name='charge',
-            name='line_number',
-            field=models.IntegerField(),
-        ),
+        migrations.RemoveConstraint(model_name='charge', name='charge_identity_unique'),
+        migrations.AlterField(model_name='charge', name='line_number', field=models.IntegerField()),
         migrations.AlterField(
             model_name='charge',
             name='statement',
@@ -68,8 +65,7 @@ class Migration(migrations.Migration):
         migrations.AddConstraint(
             model_name='charge',
             constraint=models.UniqueConstraint(
-                fields=('statement', 'line_number'),
-                name='charge_identity_unique',
+                fields=('statement', 'line_number'), name='charge_identity_unique'
             ),
         ),
     ]

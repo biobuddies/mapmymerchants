@@ -7,15 +7,8 @@ class Command(BaseCommand):
     help = 'Resolve coordinates for places missing them by querying Overpass with stored refs.'
 
     def add_arguments(self, parser: CommandParser) -> None:
-        parser.add_argument(
-            '--overpass-url',
-            default='https://overpass-api.de/api/interpreter',
-        )
-        parser.add_argument(
-            '--overpass-timeout-seconds',
-            default=180,
-            type=int,
-        )
+        parser.add_argument('--overpass-url', default='https://overpass-api.de/api/interpreter')
+        parser.add_argument('--overpass-timeout-seconds', default=180, type=int)
         parser.add_argument(
             '--place-id',
             default=None,

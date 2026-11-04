@@ -4,15 +4,8 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
-    dependencies = [
-        ('map_my_merchants', '0018_rename_chase_ref_pattern'),
-    ]
+    dependencies = [('map_my_merchants', '0018_rename_chase_ref_pattern')]
 
     operations = [
-        migrations.AddField(
-            model_name='brand',
-            name='pattern',
-            field=models.TextField(default=''),
-        ),
+        migrations.AddField(model_name='brand', name='pattern', field=models.TextField(default=''))
     ]

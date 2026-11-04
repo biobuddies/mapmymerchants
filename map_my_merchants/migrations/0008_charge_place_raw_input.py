@@ -26,7 +26,9 @@ def backfill_charge_place_and_raw_input(apps, schema_editor):
             place, _ = Place.objects.get_or_create(
                 name=charge_place_name(charge.brand.name, charge.description, charge.store_ref),
                 defaults={
-                    'address': charge_place_address(charge.brand.name, charge.description, charge.store_ref),
+                    'address': charge_place_address(
+                        charge.brand.name, charge.description, charge.store_ref
+                    ),
                     'osm_ref': charge.store_ref,
                 },
             )
@@ -40,15 +42,10 @@ class Migration(migrations.Migration):
 
     operations = [
         migrations.AddField(
-            model_name='charge',
-            name='raw_input',
-            field=models.JSONField(blank=True, default=dict),
+            model_name='charge', name='raw_input', field=models.JSONField(blank=True, default=dict)
         ),
         migrations.RunPython(backfill_charge_place_and_raw_input, migrations.RunPython.noop),
-        migrations.RemoveConstraint(
-            model_name='charge',
-            name='charge_identity_unique',
-        ),
+        migrations.RemoveConstraint(model_name='charge', name='charge_identity_unique'),
         migrations.AlterField(
             model_name='charge',
             name='place',
@@ -58,14 +55,8 @@ class Migration(migrations.Migration):
                 to='map_my_merchants.place',
             ),
         ),
-        migrations.RemoveField(
-            model_name='charge',
-            name='brand',
-        ),
-        migrations.RemoveField(
-            model_name='charge',
-            name='store_ref',
-        ),
+        migrations.RemoveField(model_name='charge', name='brand'),
+        migrations.RemoveField(model_name='charge', name='store_ref'),
         migrations.AddConstraint(
             model_name='charge',
             constraint=models.UniqueConstraint(

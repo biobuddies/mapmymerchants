@@ -8,12 +8,7 @@ def create_online_place(apps, schema_editor):
     if brand is None:
         return
     Place.objects.get_or_create(
-        name='Online',
-        defaults={
-            'brand': brand,
-            'mega_latitude': None,
-            'mega_longitude': None,
-        },
+        name='Online', defaults={'brand': brand, 'mega_latitude': None, 'mega_longitude': None}
     )
 
 
