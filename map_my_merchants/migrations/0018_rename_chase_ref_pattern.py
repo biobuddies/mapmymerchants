@@ -4,15 +4,10 @@ from django.db import migrations
 
 
 class Migration(migrations.Migration):
-
-    dependencies = [
-        ('map_my_merchants', '0017_platform_data'),
-    ]
+    dependencies = [('map_my_merchants', '0017_platform_data')]
 
     operations = [
         migrations.RenameField(
-            model_name='brand',
-            old_name='chase_ref_pattern',
-            new_name='ref_pattern',
-        ),
+            model_name='brand', old_name='chase_ref_pattern', new_name='ref_pattern'
+        )
     ]

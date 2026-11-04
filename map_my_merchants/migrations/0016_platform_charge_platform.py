@@ -5,26 +5,32 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
-    dependencies = [
-        ('map_my_merchants', '0015_unknown_place'),
-    ]
+    dependencies = [('map_my_merchants', '0015_unknown_place')]
 
     operations = [
         migrations.CreateModel(
             name='Platform',
             fields=[
-                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
+                (
+                    'id',
+                    models.BigAutoField(
+                        auto_created=True, primary_key=True, serialize=False, verbose_name='ID'
+                    ),
+                ),
                 ('name', models.TextField(unique=True)),
                 ('pattern', models.TextField()),
             ],
-            options={
-                'ordering': ('name',),
-            },
+            options={'ordering': ('name',)},
         ),
         migrations.AddField(
             model_name='charge',
             name='platform',
-            field=models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.PROTECT, related_name='charges', to='map_my_merchants.platform'),
+            field=models.ForeignKey(
+                blank=True,
+                null=True,
+                on_delete=django.db.models.deletion.PROTECT,
+                related_name='charges',
+                to='map_my_merchants.platform',
+            ),
         ),
     ]

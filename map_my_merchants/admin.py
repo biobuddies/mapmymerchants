@@ -41,11 +41,16 @@ class PlaceAdminForm(forms.ModelForm):
 
 @admin.register(Brand)
 class BrandAdmin(admin.ModelAdmin):
-    list_display = ('display_name', 'statement_name', 'wikidata_id', 'updated_by', 'created', 'updated')
+    list_display = (
+        'display_name',
+        'statement_name',
+        'wikidata_id',
+        'updated_by',
+        'created',
+        'updated',
+    )
     readonly_fields = ('id', 'created', 'statement_name', 'updated', 'updated_by')
-    formfield_overrides = {
-        TextField: {'widget': forms.TextInput},
-    }
+    formfield_overrides = {TextField: {'widget': forms.TextInput}}
 
     def has_add_permission(self, request):
         return False
@@ -110,22 +115,23 @@ class ChargeAdmin(admin.ModelAdmin):
         if not rows:
             return ''
         return format_html(
-            (
-                '<table><thead><tr><th>Key</th><th>Value</th></tr></thead>'
-                '<tbody>{}</tbody></table>'
-            ),
-            format_html_join(
-                '',
-                '<tr><th><code>{}</code></th><td><code>{}</code></td></tr>',
-                rows,
-            ),
+            ('<table><thead><tr><th>Key</th><th>Value</th></tr></thead><tbody>{}</tbody></table>'),
+            format_html_join('', '<tr><th><code>{}</code></th><td><code>{}</code></td></tr>', rows),
         )
 
 
 @admin.register(Statement)
 class StatementAdmin(admin.ModelAdmin):
     list_display = ('source_name', 'content_sha256', 'source_path', 'created', 'updated')
-    readonly_fields = ('id', 'content_sha256', 'created', 'source_name', 'source_path', 'source_preview', 'updated')
+    readonly_fields = (
+        'id',
+        'content_sha256',
+        'created',
+        'source_name',
+        'source_path',
+        'source_preview',
+        'updated',
+    )
 
     @admin.display(description='Source data')
     def source_preview(self, obj):
@@ -143,7 +149,16 @@ class StatementAdmin(admin.ModelAdmin):
 @admin.register(Place)
 class PlaceAdmin(admin.ModelAdmin):
     form = PlaceAdminForm
-    fields = ('name', 'brand', 'osm_lookup', 'osm_link', 'osm_response_html', 'address', 'coordinates', 'created')
+    fields = (
+        'name',
+        'brand',
+        'osm_lookup',
+        'osm_link',
+        'osm_response_html',
+        'address',
+        'coordinates',
+        'created',
+    )
     list_display = ('name', 'brand', 'osm_link', 'address', 'coordinates', 'created')
     search_fields = ('name',)
     readonly_fields = (
@@ -173,16 +188,20 @@ class PlaceAdmin(admin.ModelAdmin):
     def get_queryset(self, request):
         latitude = Round(Abs(Cast('mega_latitude', FloatField()) / 1_000_000), 6)
         longitude = Round(Abs(Cast('mega_longitude', FloatField()) / 1_000_000), 6)
-        return super().get_queryset(request).annotate(
-            coordinates=Concat(
-                Cast(latitude, TextField()),
-                Value('° '),
-                Case(When(mega_latitude__lt=0, then=Value('S')), default=Value('N')),
-                Value(', '),
-                Cast(longitude, TextField()),
-                Value('° '),
-                Case(When(mega_longitude__lt=0, then=Value('W')), default=Value('E')),
-                output_field=TextField(),
+        return (
+            super()
+            .get_queryset(request)
+            .annotate(
+                coordinates=Concat(
+                    Cast(latitude, TextField()),
+                    Value('° '),
+                    Case(When(mega_latitude__lt=0, then=Value('S')), default=Value('N')),
+                    Value(', '),
+                    Cast(longitude, TextField()),
+                    Value('° '),
+                    Case(When(mega_longitude__lt=0, then=Value('W')), default=Value('E')),
+                    output_field=TextField(),
+                )
             )
         )
 
@@ -208,7 +227,9 @@ class PlaceAdmin(admin.ModelAdmin):
         if not obj.osm_response:
             return ''
         formatter = HtmlFormatter(style='default')
-        highlighted = highlight(dumps(obj.osm_response, indent=2, sort_keys=True), JsonLexer(), formatter)
+        highlighted = highlight(
+            dumps(obj.osm_response, indent=2, sort_keys=True), JsonLexer(), formatter
+        )
         styles = formatter.get_style_defs()
         return format_html('<style>{}</style>{}', mark_safe(styles), mark_safe(highlighted))
 

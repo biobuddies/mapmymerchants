@@ -143,29 +143,18 @@ class Charge(Model):
     amount_usd = DecimalField(decimal_places=2, max_digits=12)
     description = TextField()
     line_number = IntegerField()
-    place = ForeignKey(
-        Place,
-        on_delete=PROTECT,
-        related_name='charges',
-    )
+    place = ForeignKey(Place, on_delete=PROTECT, related_name='charges')
     post_date = DateField()
     raw_input = JSONField(blank=True, default=dict)
     platform = ForeignKey(
-        Platform,
-        blank=True,
-        null=True,
-        on_delete=PROTECT,
-        related_name='charges',
+        Platform, blank=True, null=True, on_delete=PROTECT, related_name='charges'
     )
     statement = ForeignKey(Statement, on_delete=PROTECT, related_name='charges')
     transaction_date = DateField()
 
     class Meta:
         constraints = [
-            UniqueConstraint(
-                fields=('statement', 'line_number'),
-                name='charge_identity_unique',
-            )
+            UniqueConstraint(fields=('statement', 'line_number'), name='charge_identity_unique')
         ]
         ordering = ('-transaction_date', '-post_date', '-id')
 
