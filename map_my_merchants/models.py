@@ -1,12 +1,10 @@
 from ast import literal_eval
 from logging import getLogger
 
-from re import search
-
 from django.conf import settings
 from django.db.models import (
+    PROTECT,
     BigIntegerField,
-    CASCADE,
     DateField,
     DateTimeField,
     DecimalField,
@@ -16,9 +14,8 @@ from django.db.models import (
     JSONField,
     Manager,
     Model,
-    PROTECT,
-    UniqueConstraint,
     TextField,
+    UniqueConstraint,
     Value,
 )
 from django.db.models.functions import Cast, Concat
