@@ -21,6 +21,7 @@ from django.db.models import (
 from django.db.models.functions import Cast, Concat
 from django.utils.html import escape
 from geopy.geocoders import Nominatim
+from geopy.location import Location
 
 logger = getLogger(__name__)
 
@@ -125,14 +126,17 @@ class Place(Model):
 
     def set_mega_latitude_mega_longitude_from_address(self):
         if self.mega_latitude and self.mega_longitude:
-            logger.info(f'{self} already geocoded to {self.latitude_longitude}')
+            logger.info(f'{self} already geocoded to {self.latitude_longitude=}')
             return
         if not self.address:
             logger.warning(f'Unable to geocode {self} without address')
             return
         location = Nominatim(user_agent='map-my-merchants').geocode(self.address)
-        self.mega_latitude = location.latitude * 1_000_000
-        self.mega_longitude = location.longitude * 1_000_000
+        if not isinstance(location, Location):
+            logger.warning(f'No geocoding match for {self} at {self.address=}')
+            return
+        self.mega_latitude = round(location.latitude * 1_000_000)
+        self.mega_longitude = round(location.longitude * 1_000_000)
         self.save()
 
 
