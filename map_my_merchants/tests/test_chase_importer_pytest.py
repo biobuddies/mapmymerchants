@@ -1,6 +1,7 @@
 from io import BytesIO
 from urllib.parse import parse_qs, urlparse
 
+from django.contrib.auth import get_user_model
 from django.core.management import call_command
 from pytest import mark, raises
 
@@ -109,16 +110,9 @@ def test_resolve_missing_place_coordinates_updates_place_from_overpass(monkeypat
     )
     requests = []
 
-    class FakeResponse(BytesIO):
-        def __enter__(self):
-            return self
-
-        def __exit__(self, exc_type, exc, tb):
-            self.close()
-
     def fake_urlopen(request, timeout):
         requests.append((request.full_url, timeout))
-        return FakeResponse(payload)
+        return BytesIO(payload)
 
     monkeypatch.setattr(chase, 'urlopen', fake_urlopen)
 
@@ -160,16 +154,9 @@ def test_refresh_place_from_osm_lookup_updates_place_from_explicit_osm_id(monkey
     )
     requests = []
 
-    class FakeResponse(BytesIO):
-        def __enter__(self):
-            return self
-
-        def __exit__(self, exc_type, exc, tb):
-            self.close()
-
     def fake_urlopen(request, timeout):
         requests.append((request.full_url, timeout))
-        return FakeResponse(payload)
+        return BytesIO(payload)
 
     monkeypatch.setattr(chase, 'urlopen', fake_urlopen)
 
@@ -214,18 +201,11 @@ def test_resolve_place_by_name_query(monkeypatch, tmp_path):
     )
     requests = []
 
-    class FakeResponse(BytesIO):
-        def __enter__(self):
-            return self
-
-        def __exit__(self, exc_type, exc, tb):
-            self.close()
-
     def fake_urlopen(request, timeout):
         requests.append((request.full_url, timeout))
         query = parse_qs(urlparse(request.full_url).query)['data'][0]
         assert '"name"~"TRUGALUG CHOCOLATES",i' in query
-        return FakeResponse(trugalug_payload)
+        return BytesIO(trugalug_payload)
 
     monkeypatch.setattr(chase, 'urlopen', fake_urlopen)
 
@@ -281,3 +261,22 @@ def test_chase_brand_store_ref_matches_existing_brand_case_insensitively():
     assert brand.statement_name == 'Tap Station'
     assert Brand.objects.filter(statement_name='Tap Station').count() == 1
     assert store_ref == ''
+
+
+@mark.django_db
+@mark.parametrize(
+    ('owner', 'expected_name', 'query_count'),
+    (('from-statement', 'FOOD LION', 2), ('from-openstreetmap', 'Food Lion', 1)),
+)
+def test_brand_rename_checks_provenance_without_fetching_user(
+    django_assert_num_queries, owner, expected_name, query_count
+):
+    user = get_user_model().objects.get(username='from-statement')
+    brand = Brand.objects.get(statement_name='Food Lion')
+    brand.updated_by = get_user_model().objects.get(username=owner)
+    brand.save()
+
+    with django_assert_num_queries(query_count):
+        updated = chase.get_or_create_brand('FOOD LION', pk=brand.pk, updated_by=user)
+
+    assert updated.statement_name == expected_name

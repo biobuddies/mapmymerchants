@@ -10,7 +10,6 @@ from map_my_merchants.management.chase import (
     chase_brand_store_ref,
     create_placeholder_place_and_charge,
     extract_chase_rows,
-    get_or_create_brand,
     import_statement,
     matching_place,
     overpass_query,
@@ -20,15 +19,6 @@ from map_my_merchants.management.chase import (
 )
 from map_my_merchants.models import Brand, Charge, Place, Statement
 from map_my_merchants.xsv import load_statement_tables
-
-
-def _match_spec(description):
-    # dup: chase_brand_store_ref primary_pattern logic
-    match = primary_pattern().search(description)
-    if not match:
-        return None
-    brand = get_or_create_brand(match.group('brand'))
-    return brand, match.group('ref').lstrip('0') or '0'
 
 
 class ChaseImporterTests(TestCase):
@@ -77,15 +67,15 @@ class ChaseImporterTests(TestCase):
             self.assertIn(f'statement_{statement.id}', {name for (name,) in cursor.fetchall()})
 
     def test_matching_spec_extracts_food_lion_store_ref(self):
-        brand, store_ref = _match_spec('FOOD LION #1484')
+        brand, store_ref = chase_brand_store_ref('FOOD LION #1484')
         self.assertEqual((brand.statement_name, store_ref), ('Food Lion', '1484'))
 
     def test_matching_spec_extracts_lowes_store_ref(self):
-        brand, store_ref = _match_spec('LOWES #00625*')
+        brand, store_ref = chase_brand_store_ref('LOWES #00625*')
         self.assertEqual((brand.statement_name, store_ref), ("Lowe's", '625'))
 
     def test_matching_spec_extracts_chick_fil_a_store_ref(self):
-        brand, store_ref = _match_spec('CHICK-FIL-A #03376')
+        brand, store_ref = chase_brand_store_ref('CHICK-FIL-A #03376')
         self.assertEqual((brand.statement_name, store_ref), ('Chick-fil-A', '3376'))
 
     def test_overpass_query_uses_exact_brand_and_substring_ref(self):
@@ -140,7 +130,7 @@ class ChaseImporterTests(TestCase):
         self.assertEqual(store_ref, '')
 
     def test_matching_spec_extracts_taco_bell_store_ref_without_hash(self):
-        brand, store_ref = _match_spec('TACO BELL 003279')
+        brand, store_ref = chase_brand_store_ref('TACO BELL 003279')
         self.assertEqual((brand.statement_name, store_ref), ('TACO BELL', '3279'))
 
     def test_primary_pattern_skips_365_market_phone_number(self):
