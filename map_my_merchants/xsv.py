@@ -14,9 +14,7 @@ def load_sqlite_xsv_connection(sender, connection, **kwargs) -> None:
     raw_connection = connection.connection
     raw_connection.enable_load_extension(True)
     try:
-        raw_connection.load_extension(
-            str(Path(sqlite_xsv.__file__).resolve().with_name('xsv0.dylib'))
-        )
+        sqlite_xsv.load(raw_connection)
     finally:
         raw_connection.enable_load_extension(False)
     connection._map_my_merchants_xsv_loaded = True
@@ -122,7 +120,8 @@ def preview_statement_data(statement, row_limit: int = 10) -> str:
         preview_model = type(f'StatementPreview{statement.id}', (Model,), attrs)
         rows = tuple(
             {field_name: '' if value is None else str(value) for field_name, value in row.items()}
-            for row in preview_model.objects.annotate(line_number=F('id'))
+            for row in preview_model.objects
+            .annotate(line_number=F('id'))
             .values(
                 'line_number',
                 'transaction_date',
@@ -140,9 +139,7 @@ def preview_statement_data(statement, row_limit: int = 10) -> str:
     if not rows:
         return ''
     field_names = tuple(rows[0].keys())
-    return '\n'.join(
-        (
-            '\t'.join(field_names),
-            *('\t'.join(row[field_name] for field_name in field_names) for row in rows),
-        )
-    )
+    return '\n'.join((
+        '\t'.join(field_names),
+        *('\t'.join(row[field_name] for field_name in field_names) for row in rows),
+    ))
