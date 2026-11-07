@@ -5,7 +5,4 @@ default_context:
         - django-leaflet
         - django-plugin-extensions
         - geopy
-        - sqlite-xsv
-    python_optional_dependencies:
-        test:
-            - pytest-django
+        - sqlite-xsv>=0.2.1a13

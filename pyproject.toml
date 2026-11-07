@@ -6,16 +6,18 @@ requires-python = '>=3.12'
 version = '0'
 
 dependencies = [
-    
-    'django-plugin-extensions',
-    
+
+
+
     'django-leaflet',
-    
-    
+
+    'django-plugin-extensions',
+
+
     'geopy',
-    
-    'sqlite-xsv',
-    
+
+    'sqlite-xsv>=0.2.1a13',
+
 ]
 
 [project.optional-dependencies]
