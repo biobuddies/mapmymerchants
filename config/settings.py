@@ -14,6 +14,7 @@ from ast import literal_eval
 from logging import DEBUG, basicConfig, getLogger
 from os import getenv
 from pathlib import Path
+from sys import platform
 
 from djp import settings
 
@@ -31,7 +32,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # See https://docs.djangoproject.com/en/6.0/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = 'django-insecure-$in-4-)5+lg)ndf^#e%5pva*)**%&%%yx*23n%32^$bw7^!m#m'
+SECRET_KEY = 'django-insecure-$in-4-)5+lg)ndf^#e%5pva*)**%&%%yx*23n%32^$bw7^!m#m'  # noqa: S105, typos
 
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = literal_eval(getenv('MMM_DEBUG', 'True'))
@@ -152,8 +153,12 @@ basicConfig(level=DEBUG, format='%(levelname)s %(name)s %(message)s')
 
 getLogger(__name__).info(f'Startup CONA={CONA} ENVI={ENVI} GIHA={GIHA} ROLE={ROLE} {TABR=}')
 
-GDAL_LIBRARY_PATH = '/opt/homebrew/Cellar/gdal/3.12.0_1/lib/libgdal.dylib'
-GEOS_LIBRARY_PATH = '/opt/homebrew/Cellar/geos/3.14.1/lib/libgeos_c.dylib'
+GDAL_LIBRARY_PATH = getenv(
+    'GDAL_LIBRARY_PATH', '/opt/homebrew/lib/libgdal.dylib' if platform == 'darwin' else None
+)
+GEOS_LIBRARY_PATH = getenv(
+    'GEOS_LIBRARY_PATH', '/opt/homebrew/lib/libgeos_c.dylib' if platform == 'darwin' else None
+)
 
 # This MUST be the last line:
 settings(globals())
