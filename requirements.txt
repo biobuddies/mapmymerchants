@@ -132,7 +132,7 @@ six==1.17.0
     #   cssbeautifier
     #   jsbeautifier
     #   python-dateutil
-sqlite-xsv==0.2.0
+sqlite-xsv==0.2.1a13
     # via mapmymerchants (pyproject.toml)
 sqlparse==0.5.5
     # via django
