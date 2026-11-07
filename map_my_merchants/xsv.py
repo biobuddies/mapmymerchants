@@ -2,7 +2,6 @@ from pathlib import Path
 
 import sqlite_xsv
 from django.db import connection as default_connection
-from django.db.models import F, IntegerField, Model, TextField
 from django.db.utils import OperationalError
 
 
@@ -12,6 +11,8 @@ def load_sqlite_xsv_connection(sender, connection, **kwargs) -> None:
     if connection.connection is None:
         connection.ensure_connection()
     raw_connection = connection.connection
+    if raw_connection is None:
+        raise RuntimeError('SQLite connection is unavailable')
     raw_connection.enable_load_extension(True)
     try:
         sqlite_xsv.load(raw_connection)
@@ -35,7 +36,8 @@ def load_statement_tables(connection=default_connection) -> None:
         raise RuntimeError('Statement registry table is unavailable')
     with connection.cursor() as cursor:
         cursor.execute(
-            'select id, source_path from map_my_merchants_statement where source_path <> "" order by id'
+            'select id, source_path from map_my_merchants_statement '
+            'where source_path <> "" order by id'
         )
         for statement_id, source_path in cursor.fetchall():
             try:
@@ -62,12 +64,14 @@ def refresh_statement_table(
         cursor.execute(f'drop table if exists temp.{table_name}')
         try:
             cursor.execute(
-                f'create virtual table temp.{table_name} using csv(filename={quoted_path}, header=1)'
+                f'create virtual table temp.{table_name} '
+                f'using csv(filename={quoted_path}, header=1)'
             )
         except OperationalError:
             load_sqlite_xsv_connection(None, connection)
             cursor.execute(
-                f'create virtual table temp.{table_name} using csv(filename={quoted_path}, header=1)'
+                f'create virtual table temp.{table_name} '
+                f'using csv(filename={quoted_path}, header=1)'
             )
 
 
@@ -96,43 +100,9 @@ def statement_csv_rows(
 
 def preview_statement_data(statement, row_limit: int = 10) -> str:
     try:
-        table_name = f'statement_{statement.id}'
-        with default_connection.cursor() as cursor:
-            cursor.execute("select name from sqlite_temp_master where type = 'table'")
-            if table_name not in {name for (name,) in cursor.fetchall()}:
-                refresh_statement_table(statement.id, statement.source_path)
-        attrs = {
-            '__module__': __name__,
-            'id': IntegerField(primary_key=True, db_column='rowid'),
-            'transaction_date': TextField(db_column='Transaction Date'),
-            'post_date': TextField(db_column='Post Date'),
-            'description': TextField(db_column='Description'),
-            'category': TextField(db_column='Category'),
-            'type': TextField(db_column='Type'),
-            'amount': TextField(db_column='Amount'),
-            'memo': TextField(db_column='Memo'),
-            'Meta': type(
-                'Meta',
-                (),
-                {'app_label': 'map_my_merchants', 'db_table': table_name, 'managed': False},
-            ),
-        }
-        preview_model = type(f'StatementPreview{statement.id}', (Model,), attrs)
         rows = tuple(
-            {field_name: '' if value is None else str(value) for field_name, value in row.items()}
-            for row in preview_model.objects
-            .annotate(line_number=F('id'))
-            .values(
-                'line_number',
-                'transaction_date',
-                'post_date',
-                'description',
-                'category',
-                'type',
-                'amount',
-                'memo',
-            )
-            .order_by('line_number')[:row_limit]
+            {'line_number': str(line_number), **row}
+            for line_number, row in statement_csv_rows(statement, row_limit)
         )
     except (FileNotFoundError, ValueError) as error:
         return str(error)

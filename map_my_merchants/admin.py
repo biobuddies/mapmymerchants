@@ -21,7 +21,7 @@ class PlaceAdminForm(forms.ModelForm):
 
     class Meta:
         model = Place
-        fields = '__all__'
+        fields = ('osm_lookup',)
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)

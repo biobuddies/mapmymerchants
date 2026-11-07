@@ -146,6 +146,7 @@ class AdminTests(TestCase):
 
         def fake_refresh(*args, **kwargs):
             calls.append((args, kwargs))
+            return {}
 
         original_refresh = admin_module.refresh_place_from_osm_lookup
         admin_module.refresh_place_from_osm_lookup = fake_refresh

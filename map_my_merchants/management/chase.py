@@ -1,12 +1,14 @@
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import UTC, datetime
 from decimal import Decimal
+from functools import cache
 from hashlib import sha256
 from html import unescape
 from json import dumps, load
 from logging import getLogger
 from pathlib import Path
-from re import IGNORECASE, Pattern, compile, escape, search
+from re import IGNORECASE, Pattern, escape, search
+from re import compile as recompile
 from time import perf_counter
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode
@@ -22,16 +24,13 @@ logger = getLogger(__name__)
 CSV_ROW_LIMIT = 30
 
 
-from functools import cache
-
-
 @cache
 def _platform_names() -> str:
     return '|'.join(Platform.objects.values_list('name', flat=True).order_by('name'))
 
 
 def primary_pattern() -> Pattern[str]:
-    return compile(
+    return recompile(
         rf'^(?:(?P<platform>{_platform_names()})\s*[* ]*)?'
         rf'(?P<brand>.+?)\s+#*0*(?P<ref>\d+)(?![\s-]?\d|[a-zA-Z])\*?\s*(?P<detail>.+)?$',
         IGNORECASE,
@@ -44,13 +43,13 @@ def _normalize_name(name: str) -> str:
 
 def get_or_create_brand(brand_name: str, pk: int | None = None, updated_by=None) -> Brand:
     brand_name = brand_name.strip()
-    target_name = brand_name.strip()
     if pk is not None:
         brand = Brand.objects.get(pk=pk)
-        if brand.statement_name != target_name and (
+        if brand.statement_name != brand_name and (
+            # pyrefly: ignore [missing-attribute]
             not updated_by or not brand.updated_by_id or brand.updated_by_id == updated_by.id
         ):
-            brand.statement_name = target_name
+            brand.statement_name = brand_name
             if updated_by:
                 brand.updated_by = updated_by
             brand.save(
@@ -66,7 +65,7 @@ def get_or_create_brand(brand_name: str, pk: int | None = None, updated_by=None)
         if _normalize_name(brand.statement_name) == normalized:
             return brand
     return Brand.objects.create(
-        statement_name=target_name, display_name=target_name, updated_by=updated_by
+        statement_name=brand_name, display_name=brand_name, updated_by=updated_by
     )
 
 
@@ -192,7 +191,7 @@ def chase_brand_store_ref(description: str, updated_by=None) -> tuple[Brand, str
 
 
 def parse_date(value: str) -> datetime:
-    return datetime.strptime(value, '%m/%d/%Y')
+    return datetime.strptime(value, '%m/%d/%Y').replace(tzinfo=UTC)
 
 
 def find_osm_element(
@@ -344,8 +343,7 @@ def matching_place(brand: Brand, store_ref: str) -> Place | None:
 
 def place_matches_brand(brand: Brand, place: Place) -> bool:
     tags = place.osm_response.get('tags', {})
-    place_name = place.name.partition(' #')[0]
-    return any((place.brand_id == brand.id, tags.get('brand') == brand.display_name))
+    return place.brand_id == brand.id or tags.get('brand') == brand.display_name
 
 
 def best_element(
@@ -451,7 +449,7 @@ def element_score(brand: Brand, element: dict) -> tuple[int, int, int]:
     return (
         int(tags.get('brand') == brand.display_name),
         int(bool(tags.get('addr:housenumber')) and bool(tags.get('addr:street'))),
-        {'node': 3, 'way': 2, 'relation': 1}.get(element.get('type'), 0),
+        {'node': 3, 'way': 2, 'relation': 1}.get(element.get('type', ''), 0),
     )
 
 
@@ -460,7 +458,7 @@ def _platform_regex():
     platforms.sort(key=lambda p: len(p.pattern), reverse=True)
     patterns = [p.pattern.lstrip('^') for p in platforms]
     return (
-        compile('^(' + '|'.join(map(escape, patterns)) + ')[ *]+', IGNORECASE),
+        recompile('^(' + '|'.join(map(escape, patterns)) + ')[ *]+', IGNORECASE),
         {p.pattern.upper(): p for p in platforms},
     )
 
@@ -516,6 +514,7 @@ def get_or_create_place(brand: Brand, name: str, store_ref: str, pk: int | None 
 
 
 def create_placeholder_place_and_charge(row: ChaseRow) -> dict[str, str]:
+    # pyrefly: ignore [missing-attribute]
     if online_place := row.brand.places.filter(name='Online').first():
         place = online_place
         status = 'reused-online'

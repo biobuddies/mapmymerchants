@@ -11,7 +11,6 @@ def charge_place_address(brand_name, description, store_ref):
 
 
 def backfill_charge_place_and_raw_input(apps, schema_editor):
-    Brand = apps.get_model('map_my_merchants', 'Brand')
     Charge = apps.get_model('map_my_merchants', 'Charge')
     Place = apps.get_model('map_my_merchants', 'Place')
 
