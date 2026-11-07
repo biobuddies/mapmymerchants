@@ -1,9 +1,9 @@
 default_context:
+    description: Map merchants from card transactions
     languages: Node,Python
     python_dependencies:
-        - django
         - django-leaflet
-        - djp
+        - django-plugin-extensions
         - geopy
         - sqlite-xsv
     python_optional_dependencies:
