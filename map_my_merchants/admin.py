@@ -44,11 +44,13 @@ class BrandAdmin(admin.ModelAdmin):
     list_display = (
         'display_name',
         'statement_name',
+        'private',
         'wikidata_id',
         'updated_by',
         'created',
         'updated',
     )
+    list_filter = ('private',)
     readonly_fields = ('id', 'created', 'statement_name', 'updated', 'updated_by')
     formfield_overrides = {TextField: {'widget': forms.TextInput}}
 
@@ -152,6 +154,7 @@ class PlaceAdmin(admin.ModelAdmin):
     fields = (
         'name',
         'brand',
+        'private',
         'osm_lookup',
         'osm_link',
         'osm_response_html',
@@ -159,7 +162,8 @@ class PlaceAdmin(admin.ModelAdmin):
         'coordinates',
         'created',
     )
-    list_display = ('name', 'brand', 'osm_link', 'address', 'coordinates', 'created')
+    list_display = ('name', 'brand', 'private', 'osm_link', 'address', 'coordinates', 'created')
+    list_filter = ('private',)
     search_fields = ('name',)
     readonly_fields = (
         'id',
