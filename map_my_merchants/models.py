@@ -5,6 +5,7 @@ from django.conf import settings
 from django.db.models import (
     PROTECT,
     BigIntegerField,
+    BooleanField,
     DateField,
     DateTimeField,
     DecimalField,
@@ -42,6 +43,7 @@ class Platform(Model):
 
 class Brand(Model):
     created = DateTimeField(auto_now_add=True)
+    private = BooleanField(blank=True, default=None, null=True)
     wikidata_id = TextField(blank=True)
     updated = DateTimeField(auto_now=True)
     updated_by = ForeignKey(
@@ -106,6 +108,7 @@ class Place(Model):
     osm_ref = TextField(blank=True)
     osm_response = JSONField(blank=True, default=dict)
     osm_type = TextField(blank=True)
+    private = BooleanField(blank=True, default=None, null=True)
     updated = DateTimeField(auto_now=True)
 
     objects = PlaceManager()
