@@ -38,6 +38,23 @@ Import the first three Coastal POS purchases (skip deposits, transfers, and refu
 The original CSV rows are retained. Coastal supplies one date, used for both transaction and post
 dates. Other Coastal payment descriptions are not imported yet.
 
+Brands and places have a nullable `private` flag, editable in the admin. `None` means unreviewed.
+Only `private=False` rows are seeded; places also require `brand__private=False`.
+
+After applying migrations and reviewing privacy flags, snapshot public brands and places with:
+
+```bash
+.venv/bin/python manage.py reseed
+```
+
+This writes the next `*_seed.py` data migration, using brand statement names and place names
+instead of database IDs. Transactions, timestamps, and user provenance are omitted. Existing
+privacy flags are preserved when applying seeds.
+
+Reseeding removes superseded rows from earlier seed migrations' literal `BRANDS` and `PLACES`
+snapshots, including rows now private or unreviewed. Other rows, migration dependencies, and
+operations remain. Apply the new migration normally; its reverse is a no-op.
+
 ## TODO
 * Support other Coastal payments and any other useful exports
 * Switch to Decimal for latitude and longitude

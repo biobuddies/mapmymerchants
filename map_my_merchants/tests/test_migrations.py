@@ -9,6 +9,7 @@ from pytest import mark
 @mark.django_db(transaction=True)
 def test_brand_names_and_provenance_preserve_existing_data():
     executor = MigrationExecutor(connection)
+    latest = executor.loader.graph.leaf_nodes('map_my_merchants')
     previous = [
         ('map_my_merchants', '0022_drop_brand_pattern'),
         *executor.loader.graph.leaf_nodes(settings.AUTH_USER_MODEL.split('.')[0]),
@@ -45,4 +46,4 @@ def test_brand_names_and_provenance_preserve_existing_data():
         assert not generated.is_active
         assert generated.password.startswith('!')
     finally:
-        MigrationExecutor(connection).migrate(current)
+        MigrationExecutor(connection).migrate(latest)
