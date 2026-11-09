@@ -5,4 +5,9 @@ default_context:
         - django-leaflet
         - django-plugin-extensions
         - geopy
+        - gunicorn
+        - pygments
         - sqlite-xsv>=0.2.1a13
+    python_optional_dependencies:
+        pre-commit:
+            - django-stubs

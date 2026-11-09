@@ -1,0 +1,27 @@
+extend = '.biobuddies/ruff.toml'
+
+[lint]
+extend-ignore = [
+    'ANN001',
+    'ANN002',
+    'ANN003',
+    'ANN201',
+    'ANN202',
+    'ANN204',
+    'D100',
+    'D102',
+    'D105',
+    'D106',
+    'G004',
+]
+
+[lint.extend-per-file-ignores]
+'config/settings.py' = ['PLW1508']
+'map_my_merchants/admin.py' = ['ARG002', 'RUF012', 'S308']
+'map_my_merchants/apps.py' = ['PLC0415']
+'map_my_merchants/management/chase.py' = ['ARG001', 'S310']
+'map_my_merchants/management/commands/*.py' = ['ARG002']
+'map_my_merchants/models.py' = ['RUF012']
+'map_my_merchants/migrations/*.py' = ['ARG001', 'RUF012']
+'map_my_merchants/tests/*.py' = ['ARG001', 'ARG005', 'DTZ001', 'PT009', 'S106', 'S108']
+'map_my_merchants/xsv.py' = ['ARG001', 'FBT003', 'S608']

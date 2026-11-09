@@ -11,7 +11,7 @@ https://docs.djangoproject.com/en/6.0/ref/settings/
 """
 
 from ast import literal_eval
-from logging import DEBUG, basicConfig, getLogger
+from logging import basicConfig, getLogger
 from os import getenv
 from pathlib import Path
 from sys import platform
@@ -149,9 +149,9 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 LOGGING = {'version': 1, 'disable_existing_loggers': True, 'handlers': {}, 'loggers': {}}
 
-basicConfig(level=DEBUG, format='%(levelname)s %(name)s %(message)s')
+basicConfig(level='DEBUG' if DEBUG else 'INFO', format='%(levelname)s %(name)s %(message)s')
 
-getLogger(__name__).info(f'Startup CONA={CONA} ENVI={ENVI} GIHA={GIHA} ROLE={ROLE} {TABR=}')
+getLogger(__name__).info(f'Startup {CONA=} {ENVI=} {GIHA=} {ROLE=} {TABR=}')
 
 GDAL_LIBRARY_PATH = getenv(
     'GDAL_LIBRARY_PATH', '/opt/homebrew/lib/libgdal.dylib' if platform == 'darwin' else None
