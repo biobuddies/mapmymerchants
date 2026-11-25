@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <title>Cash Flow</title>
+        <meta charset='utf-8' />
+        <style>
+            :root {
+                --expense: #ec4647;
+                --grid: #e0e0e0;
+                --income: #257de0;
+                --muted: #666;
+                --surface: #fff;
+                --text: #191919;
+            }
+            @media (prefers-color-scheme: dark) {
+                :root {
+                    --expense: #eb6263;
+                    --grid: #383838;
+                    --income: #338ced;
+                    --muted: #aaa;
+                    --surface: #191919;
+                    --text: #efefef;
+                }
+            }
+            body {
+                background: var(--surface);
+                color: var(--text);
+                font-family: system-ui, sans-serif;
+                margin: 16px;
+            }
+            .chart {
+                align-items: center;
+                display: grid;
+                gap: 2px 8px;
+                grid-template-columns: 5em 1fr 1fr 11em;
+                margin-bottom: 24px;
+                max-width: 960px;
+            }
+            .bar {
+                border-radius: 4px;
+                height: 14px;
+                min-width: 1px;
+            }
+            .expense {
+                background: var(--expense);
+                border-radius: 4px 0 0 4px;
+                justify-self: end;
+            }
+            .income {
+                background: var(--income);
+                border-left: 1px solid var(--grid);
+                border-radius: 0 4px 4px 0;
+            }
+            .legend span::before {
+                border-radius: 2px;
+                content: '';
+                display: inline-block;
+                height: 10px;
+                margin: 0 4px 0 12px;
+                width: 10px;
+            }
+            .legend .expense-key::before {
+                background: var(--expense);
+            }
+            .legend .income-key::before {
+                background: var(--income);
+            }
+            .muted,
+            td {
+                white-space: nowrap;
+                color: var(--muted);
+                font-variant-numeric: tabular-nums;
+            }
+            td,
+            th {
+                padding: 2px 12px;
+                text-align: right;
+            }
+        </style>
+    </head>
+    <body>
+        <h1>Cash flow by month</h1>
+        <p class="legend">
+            <span class="expense-key">Expense</span><span class="income-key">Income</span>
+        </p>
+        <div class="chart">
+            {% for month in months %}
+                <span>{{ month.month|date:'Y-m' }}</span>
+                <div class="bar expense"
+                     style="width: {{ month.expense_percent }}%"
+                     title='{{ month.month|date:"Y-m" }} expense ${{ month.expense_usd }}'></div>
+                <div class="bar income"
+                     style="width: {{ month.income_percent }}%"
+                     title='{{ month.month|date:"Y-m" }} income ${{ month.income_usd }}'></div>
+                <span class="muted">{{ month.net_usd|floatformat:2 }} {{ month.direction }}</span>
+            {% empty %}
+                <p>Import a CSV with <code>manage.py import_cash_flow_csv</code>.</p>
+            {% endfor %}
+        </div>
+        <table>
+            <thead>
+                <tr>
+                    <th>Month</th>
+                    <th>Income (USD)</th>
+                    <th>Expense (USD)</th>
+                    <th>Net (USD)</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for month in months %}
+                    <tr>
+                        <td>{{ month.month|date:'Y-m' }}</td>
+                        <td>{{ month.income_usd|floatformat:2 }}</td>
+                        <td>{{ month.expense_usd|floatformat:2 }}</td>
+                        <td>{{ month.net_usd|floatformat:2 }}</td>
+                    </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </body>
+</html>

@@ -18,6 +18,10 @@ Including another URLconf
 from django.contrib import admin
 from django.urls import path
 
-from map_my_merchants.views import map_view
+from map_my_merchants.views import cash_flow_view, map_view
 
-urlpatterns = [path('', map_view, name='map'), path('admin/', admin.site.urls)]
+urlpatterns = [
+    path('', map_view, name='map'),
+    path('admin/', admin.site.urls),
+    path('cash-flow/', cash_flow_view, name='cash-flow'),
+]
