@@ -157,3 +157,25 @@ class Charge(Model):
 
     def __str__(self):
         return f'{self.statement}#{self.line_number} {self.amount_usd}'
+
+
+class Transaction(Model):
+    """Signed account activity: positive is income, negative is expense."""
+
+    amount_usd = DecimalField(decimal_places=2, max_digits=12)
+    description = TextField()
+    line_number = IntegerField()
+    post_date = DateField()
+    raw_input = JSONField(blank=True, default=dict)
+    statement = ForeignKey(Statement, on_delete=PROTECT, related_name='transactions')
+
+    class Meta:
+        constraints = [
+            UniqueConstraint(
+                fields=('statement', 'line_number'), name='transaction_identity_unique'
+            )
+        ]
+        ordering = ('-post_date', '-id')
+
+    def __str__(self):
+        return f'{self.statement}#{self.line_number} {self.amount_usd}'
