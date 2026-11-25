@@ -28,6 +28,14 @@ Resolve coordinates for places missing them with:
 .venv/bin/python manage.py resolve_place_coordinates
 ```
 
+Chart monthly income against expense at `/cash-flow/` after importing checking or card CSVs with:
+
+```bash
+.venv/bin/python manage.py import_cash_flow_csv ~/Downloads/checking.csv
+```
+
+The importer reads either a signed `Amount` column (Chase) or unsigned `Credit`/`Debit` columns.
+
 ## TODO
 * Support the Coastal debit export, and any other useful exports
 * Switch to Decimal for latitude and longitude
